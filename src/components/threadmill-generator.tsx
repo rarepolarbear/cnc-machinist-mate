@@ -4,12 +4,7 @@ import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import {
-  Clipboard,
-  Cog,
-  Check,
-  Zap,
-} from 'lucide-react';
+import { Clipboard, Cog, Check, Zap } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -22,7 +17,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -31,58 +25,72 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 const formSchema = z.object({
-  cutterDiameter: z.coerce.number().positive('Must be positive.'),
-  circleDiameter: z.coerce.number().positive('Must be positive.'),
-  speed: z.coerce.number().int().positive('Must be a positive integer.'),
-  feed: z.coerce.number().positive('Must be positive.'),
-  depthOfCut: z.coerce.number().positive('Must be positive.'),
-  stepover: z.coerce.number().positive('Must be positive.'),
+  threadMillDiameter: z.coerce.number().positive(),
+  threadPitch: z.coerce.number().positive(),
+  minorDiameter: z.coerce.number().positive(),
+  majorDiameter: z.coerce.number().positive(),
+  threadDepth: z.coerce.number().positive(),
+  speed: z.coerce.number().int().positive(),
+  feed: z.coerce.number().positive(),
+  hand: z.enum(['rh', 'lh']),
+}).refine(data => data.majorDiameter > data.minorDiameter, {
+    message: "Major diameter must be larger than minor diameter.",
+    path: ["majorDiameter"],
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
 function generateGCode(data: FormValues): string {
-  const { cutterDiameter, circleDiameter, speed, feed, depthOfCut, stepover } = data;
-  const toolRadius = cutterDiameter / 2;
-  const circleRadius = circleDiameter / 2;
-  const effectiveRadius = circleRadius - toolRadius;
-  const stepoverAmount = stepover;
+  const {
+    threadMillDiameter,
+    threadPitch,
+    minorDiameter,
+    majorDiameter,
+    threadDepth,
+    speed,
+    feed,
+    hand,
+  } = data;
 
-  if (effectiveRadius <= 0) {
-    return 'Error: Cutter diameter is larger than or equal to the circle diameter.';
-  }
+  const toolRadius = threadMillDiameter / 2;
+  const majorRadius = majorDiameter / 2;
+  
+  // For internal threads, the tool path radius is the hole's major radius minus the tool's radius
+  const pathRadius = majorRadius - toolRadius;
+  const helicalDirection = hand === 'rh' ? 'G02' : 'G03'; // G02 for RH (CW), G03 for LH (CCW)
+  const compensationDirection = hand === 'rh' ? 'G41' : 'G42'; // G41 for RH (Left comp), G42 for LH (Right comp)
+  const zIncrement = threadPitch;
 
-  let gcode = `(Circular Interpolation G-Code)\n`;
-  gcode += `(Cutter Dia: ${cutterDiameter}, Circle Dia: ${circleDiameter})\n`;
+  let gcode = `(Thread Milling G-Code - ${hand === 'rh' ? 'Right Hand' : 'Left Hand'})\n`;
+  gcode += `(Major Dia: ${majorDiameter}, Pitch: ${threadPitch})\n`;
   gcode += `G90 G17 G20 G40 G80;\n`;
   gcode += `T1 M06 (SELECT TOOL 1);\n`;
   gcode += `G54;\n`;
   gcode += `M03 S${speed};\n`;
-  gcode += `G00 X${effectiveRadius.toFixed(4)} Y0.;\n`;
+  gcode += `G00 X0. Y0.;\n`; // Move to center of the hole
   gcode += `G43 H01 Z0.1;\n`;
   
-  let currentDepth = 0;
-  while (currentDepth < depthOfCut) {
-    currentDepth = Math.min(currentDepth + depthOfCut, depthOfCut);
-    gcode += `G01 Z-${currentDepth.toFixed(4)} F${feed / 2};\n`;
-
-    let currentRadius = effectiveRadius;
-    while (currentRadius > 0) {
-        gcode += `G02 X${currentRadius.toFixed(4)} Y0. I-${currentRadius.toFixed(4)} J0. F${feed};\n`;
-        currentRadius -= stepoverAmount;
-        if(currentRadius > 0) {
-            gcode += `G01 X${currentRadius.toFixed(4)};\n`;
-        } else {
-            // Final cleanup pass at the center
-             gcode += `G01 X0. Y0.;\n`;
-        }
-    }
-     // Mill the center point
-    gcode += `G01 X0. Y0.;\n`;
-  }
+  // Rapid to a safe Z above the start depth
+  gcode += `G00 Z-${(threadDepth - zIncrement).toFixed(4)};\n`;
   
+  // Position at hole center at depth
+  gcode += `G01 Z-${threadDepth.toFixed(4)} F${feed / 2};\n`;
+  
+  // Cutter compensation on, move to start of helix
+  gcode += `${compensationDirection} D01 X${pathRadius.toFixed(4)} Y0. F${feed};\n`;
+  
+  // Helical move up to create the thread
+  gcode += `G91; (Incremental mode)\n`;
+  gcode += `${helicalDirection} I-${pathRadius.toFixed(4)} J0. Z${zIncrement.toFixed(4)} F${feed};\n`;
+  gcode += `G90; (Absolute mode)\n`;
+
+  // Retract from wall and cancel compensation
+  gcode += `G01 G40 X0. Y0.;\n`;
+
+  // Rapid retract out of the hole
   gcode += `G00 Z1.0;\n`;
   gcode += `M05;\n`;
   gcode += `G91 G28 Z0;\n`;
@@ -92,19 +100,21 @@ function generateGCode(data: FormValues): string {
   return gcode;
 }
 
-export function GCodeGenerator() {
+export function ThreadMillGenerator() {
   const [gCode, setGCode] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      cutterDiameter: 0.5,
-      circleDiameter: 3.0,
-      speed: 3000,
-      feed: 20.0,
-      depthOfCut: 0.25,
-      stepover: 0.2,
+      threadMillDiameter: 0.4,
+      threadPitch: 1 / 20, // 20 TPI
+      minorDiameter: 0.4375, // 7/16
+      majorDiameter: 0.5, // 1/2-20
+      threadDepth: 0.5,
+      speed: 4000,
+      feed: 15.0,
+      hand: 'rh',
     },
   });
 
@@ -126,10 +136,10 @@ export function GCodeGenerator() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-2xl font-headline">
           <Cog className="text-primary" />
-          <span>Circular Interpolation</span>
+          <span>Thread Milling</span>
         </CardTitle>
         <CardDescription>
-          Enter your parameters to generate G-code for milling a circular pocket on a Haas CNC.
+          Enter your parameters to generate G-code for milling internal threads on a Haas CNC.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -138,10 +148,10 @@ export function GCodeGenerator() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <FormField
                 control={form.control}
-                name="cutterDiameter"
+                name="threadMillDiameter"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Cutter Diameter (in)</FormLabel>
+                    <FormLabel>Threadmill Diameter (in)</FormLabel>
                     <FormControl>
                       <Input type="number" step="0.001" {...field} />
                     </FormControl>
@@ -151,10 +161,23 @@ export function GCodeGenerator() {
               />
               <FormField
                 control={form.control}
-                name="circleDiameter"
+                name="threadPitch"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Circle Diameter (in)</FormLabel>
+                    <FormLabel>Thread Pitch (in)</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.0001" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="minorDiameter"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Minor Diameter (in)</FormLabel>
                     <FormControl>
                       <Input type="number" step="0.001" {...field} />
                     </FormControl>
@@ -163,6 +186,32 @@ export function GCodeGenerator() {
                 )}
               />
               <FormField
+                control={form.control}
+                name="majorDiameter"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Major Diameter (in)</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.001" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="threadDepth"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Depth of Threads (in)</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.001" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+               <FormField
                 control={form.control}
                 name="speed"
                 render={({ field }) => (
@@ -188,35 +237,36 @@ export function GCodeGenerator() {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="depthOfCut"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Total Depth of Cut (in)</FormLabel>
-                    <FormControl>
-                      <Input type="number" step="0.001" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="stepover"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Stepover (in)</FormLabel>
-                    <FormControl>
-                      <Input type="number" step="0.001" {...field} />
-                    </FormControl>
-                     <FormDescription>
-                      Typically 40-50% of cutter dia.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                <FormField
+                    control={form.control}
+                    name="hand"
+                    render={({ field }) => (
+                        <FormItem className="space-y-3">
+                        <FormLabel>Thread Hand</FormLabel>
+                        <FormControl>
+                            <RadioGroup
+                            onValueChange={field.onChange}
+                            defaultValue={field.value}
+                            className="flex flex-row space-x-4"
+                            >
+                            <FormItem className="flex items-center space-x-2">
+                                <FormControl>
+                                <RadioGroupItem value="rh" />
+                                </FormControl>
+                                <FormLabel className="font-normal">Right Hand</FormLabel>
+                            </FormItem>
+                            <FormItem className="flex items-center space-x-2">
+                                <FormControl>
+                                <RadioGroupItem value="lh" />
+                                </FormControl>
+                                <FormLabel className="font-normal">Left Hand</FormLabel>
+                            </FormItem>
+                            </RadioGroup>
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                />
             </div>
             <Button size="lg" type="submit" className="w-full sm:w-auto">
               <Zap className="mr-2 h-5 w-5" />

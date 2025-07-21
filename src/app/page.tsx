@@ -1,4 +1,6 @@
 import { GCodeGenerator } from '@/components/gcode-generator';
+import { ThreadMillGenerator } from '@/components/threadmill-generator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function Home() {
   return (
@@ -9,10 +11,21 @@ export default function Home() {
             CNC Machinist Mate
           </h1>
           <p className="text-muted-foreground mt-2 text-lg max-w-2xl mx-auto">
-            Your assistant for everyday CNC tasks. Start by generating G-code for circular interpolation on a Haas mill.
+            Your assistant for everyday CNC tasks. Select a tool to get started.
           </p>
         </header>
-        <GCodeGenerator />
+        <Tabs defaultValue="circular-interpolation" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="circular-interpolation">Circular Interpolation</TabsTrigger>
+            <TabsTrigger value="thread-milling">Thread Milling</TabsTrigger>
+          </TabsList>
+          <TabsContent value="circular-interpolation">
+            <GCodeGenerator />
+          </TabsContent>
+          <TabsContent value="thread-milling">
+            <ThreadMillGenerator />
+          </TabsContent>
+        </Tabs>
       </div>
     </main>
   );

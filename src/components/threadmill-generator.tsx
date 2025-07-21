@@ -29,7 +29,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 const formSchema = z.object({
   threadMillDiameter: z.coerce.number().positive(),
-  threadPitch: z.coerce.number().positive(),
+  threadsPerInch: z.coerce.number().positive(),
   minorDiameter: z.coerce.number().positive(),
   majorDiameter: z.coerce.number().positive(),
   threadDepth: z.coerce.number().positive(),
@@ -46,7 +46,7 @@ type FormValues = z.infer<typeof formSchema>;
 function generateGCode(data: FormValues): string {
   const {
     threadMillDiameter,
-    threadPitch,
+    threadsPerInch,
     minorDiameter,
     majorDiameter,
     threadDepth,
@@ -57,6 +57,7 @@ function generateGCode(data: FormValues): string {
 
   const toolRadius = threadMillDiameter / 2;
   const majorRadius = majorDiameter / 2;
+  const threadPitch = 1 / threadsPerInch;
   
   // For internal threads, the tool path radius is the hole's major radius minus the tool's radius
   const pathRadius = majorRadius - toolRadius;
@@ -65,7 +66,7 @@ function generateGCode(data: FormValues): string {
   const zIncrement = threadPitch;
 
   let gcode = `(Thread Milling G-Code - ${hand === 'rh' ? 'Right Hand' : 'Left Hand'})\n`;
-  gcode += `(Major Dia: ${majorDiameter}, Pitch: ${threadPitch})\n`;
+  gcode += `(Major Dia: ${majorDiameter}, TPI: ${threadsPerInch})\n`;
   gcode += `G90 G17 G20 G40 G80;\n`;
   gcode += `T1 M06 (SELECT TOOL 1);\n`;
   gcode += `G54;\n`;
@@ -108,7 +109,7 @@ export function ThreadMillGenerator() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       threadMillDiameter: 0.4,
-      threadPitch: 1 / 20, // 20 TPI
+      threadsPerInch: 20, // 20 TPI
       minorDiameter: 0.4375, // 7/16
       majorDiameter: 0.5, // 1/2-20
       threadDepth: 0.5,
@@ -161,12 +162,12 @@ export function ThreadMillGenerator() {
               />
               <FormField
                 control={form.control}
-                name="threadPitch"
+                name="threadsPerInch"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Thread Pitch (in)</FormLabel>
+                    <FormLabel>Threads Per Inch (TPI)</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.0001" {...field} />
+                      <Input type="number" step="1" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

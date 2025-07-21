@@ -9,7 +9,7 @@ export default function Home() {
             CNC Machinist Mate
           </h1>
           <p className="text-muted-foreground mt-2 text-lg max-w-2xl mx-auto">
-            Generate G-code for circular interpolation on a Haas CNC mill with AI-powered safety checks.
+            Your assistant for everyday CNC tasks. Start by generating G-code for circular interpolation on a Haas mill.
           </p>
         </header>
         <GCodeGenerator />

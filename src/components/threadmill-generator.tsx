@@ -65,6 +65,7 @@ function generateGCode(data: FormValues): string {
   const compensationDirection = hand === 'rh' ? 'G41' : 'G42'; // G41 for RH (Left comp), G42 for LH (Right comp)
   const zStart = 0; // Assuming top of part is Z0
   const zBottom = -threadDepth;
+  const numberOfRevolutions = Math.ceil(threadDepth / threadPitch);
 
   let gcode = `(Thread Milling G-Code - ${hand === 'rh' ? 'Right Hand' : 'Left Hand'})\n`;
   gcode += `(Major Dia: ${majorDiameter}, TPI: ${threadsPerInch})\n`;
@@ -75,15 +76,22 @@ function generateGCode(data: FormValues): string {
   gcode += `G00 X0. Y0.;\n`; // Move to center of the hole
   gcode += `G43 H01 Z${(zStart + 0.1).toFixed(4)};\n`;
   
-  // Rapid to bottom of the hole
-  gcode += `G00 Z${zBottom.toFixed(4)};\n`;
+  // Rapid to starting Z (bottom of the hole) plus a small amount to avoid crashing
+  gcode += `G00 Z${(zBottom + 0.05).toFixed(4)};\n`;
+
+  // Move to center of the pre-drilled hole
+  gcode += `G00 X0. Y0.;\n`;
+
+  // Position at bottom of the hole
+  gcode += `G01 Z${zBottom.toFixed(4)} F${feed * 2};\n`;
   
-  // Cutter compensation on, move to start of helix
+  // Cutter compensation on, move to start of helix arc
   gcode += `${compensationDirection} D01 X${pathRadius.toFixed(4)} Y0. F${feed};\n`;
   
-  // Helical move up to create the thread. One full circle.
-  // We specify the end Z and the relative center of the arc.
-  gcode += `${helicalDirection} X${pathRadius.toFixed(4)} Y0. Z${(zBottom + threadPitch).toFixed(4)} I-${pathRadius.toFixed(4)} J0. F${feed};\n`;
+  // Helical move up to create the thread.
+  // Z final position is 0 (top of the part)
+  // L is the number of revolutions
+  gcode += `${helicalDirection} X${pathRadius.toFixed(4)} Y0. Z${zStart.toFixed(4)} I-${pathRadius.toFixed(4)} J0. F${feed};\n`;
 
   // Retract from wall and cancel compensation
   gcode += `G01 G40 X0. Y0.;\n`;
@@ -91,8 +99,8 @@ function generateGCode(data: FormValues): string {
   // Rapid retract out of the hole
   gcode += `G00 Z${(zStart + 1.0).toFixed(4)};\n`;
   gcode += `M05;\n`;
-  gcode += `G91 G28 Z0;\n`;
-  gcode += `G91 G28 X0 Y0;\n`;
+  gcode += `G28 Z0;\n`;
+  gcode += `G28 X0 Y0;\n`;
   gcode += `M30;\n`;
 
   return gcode;

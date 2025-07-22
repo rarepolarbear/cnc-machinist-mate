@@ -72,28 +72,23 @@ function generateGCode(data: FormValues): string {
   gcode += `T1 M06 (SELECT TOOL 1);\n`;
   gcode += `G54;\n`;
   gcode += `M03 S${speed};\n`;
-  gcode += `G00 X0. Y0.;\n`; // Move to center of the hole
+  gcode += `G00 G90 X0. Y0.;\n`; // Move to center of the hole
   gcode += `G43 H01 Z${(zStart + 0.1).toFixed(4)};\n`;
   
-  // Rapid to bottom of the hole
-  gcode += `G00 Z${zBottom.toFixed(4)};\n`;
+  // Rapid in absolute mode to a safe Z above the bottom
+  gcode += `G00 G90 Z${zBottom.toFixed(4)};\n`;
   
   // Cutter compensation on, linear move to start of helix arc
-  gcode += `${compensationDirection} D01 G01 X${pathRadius.toFixed(4)} Y0. F${feed / 2};\n`;
-
-  // Use a while loop to generate the helical path upwards
-  let currentZ = zBottom;
-  while (currentZ < zStart) {
-    let zMove = Math.min(threadPitch, zStart - currentZ);
-    currentZ += zMove;
-    gcode += `${helicalDirection} X${pathRadius.toFixed(4)} Y0. Z${currentZ.toFixed(4)} I-${pathRadius.toFixed(4)} J0. F${feed};\n`;
-  }
+  gcode += `${compensationDirection} D01 G01 X${pathRadius.toFixed(4)} Y0. F${(feed / 2).toFixed(4)};\n`;
   
+  // Helical interpolation in a loop
+  gcode += `${helicalDirection} X${pathRadius.toFixed(4)} Y0. Z${zBottom.toFixed(4)} I-${pathRadius.toFixed(4)} J0. F${feed.toFixed(4)};\n`;
+
   // Retract from wall and cancel compensation
   gcode += `G01 G40 X0. Y0.;\n`;
 
   // Rapid retract out of the hole
-  gcode += `G00 Z${(zStart + 1.0).toFixed(4)};\n`;
+  gcode += `G00 G90 Z${(zStart + 1.0).toFixed(4)};\n`;
   gcode += `M05;\n`;
   gcode += `G28 Z0;\n`;
   gcode += `G28 X0 Y0;\n`;

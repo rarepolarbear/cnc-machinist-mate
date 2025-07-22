@@ -59,37 +59,48 @@ function generateGCode(data: FormValues): string {
   const majorRadius = majorDiameter / 2;
   const threadPitch = 1 / threadsPerInch;
   
-  // For internal threads, the tool path radius is the hole's major radius minus the tool's radius
   const pathRadius = majorRadius - toolRadius;
   const helicalDirection = hand === 'rh' ? 'G03' : 'G02'; // Climb milling for internal threads
   const compensationDirection = hand === 'rh' ? 'G41' : 'G42';
-  const zStart = 0; // Assuming top of part is Z0
+  
   const zBottom = -threadDepth;
 
   let gcode = `(Thread Milling G-Code - ${hand === 'rh' ? 'Right Hand' : 'Left Hand'})\n`;
   gcode += `(Major Dia: ${majorDiameter}, TPI: ${threadsPerInch})\n`;
-  gcode += `G90 G17 G20 G40 G80;\n`;
+  gcode += `G20 (INCH MODE)\n`;
+  gcode += `G80 G40 G17\n`
   gcode += `T1 M06 (SELECT TOOL 1);\n`;
-  gcode += `G54;\n`;
-  gcode += `M03 S${speed};\n`;
-  gcode += `G00 G90 X0. Y0.;\n`; // Move to center of the hole
-  gcode += `G43 H01 Z${(zStart + 0.1).toFixed(4)};\n`;
+  gcode += `G90 G54 S${speed} M03;\n`;
+  gcode += `G00 X0. Y0.;\n`; 
+  gcode += `G43 Z0.1 H1 M08;\n`;
   
-  // Rapid in absolute mode to a safe Z above the bottom
-  gcode += `G00 G90 Z${zBottom.toFixed(4)};\n`;
-  
+  // Go to bottom of hole
+  gcode += `G00 Z${zBottom.toFixed(4)};\n`;
+
   // Cutter compensation on, linear move to start of helix arc
   gcode += `${compensationDirection} D01 G01 X${pathRadius.toFixed(4)} Y0. F${(feed / 2).toFixed(4)};\n`;
   
-  // Helical interpolation in a loop
-  gcode += `${helicalDirection} X${pathRadius.toFixed(4)} Y0. Z${zBottom.toFixed(4)} I-${pathRadius.toFixed(4)} J0. F${feed.toFixed(4)};\n`;
+  // Switch to incremental for looped helical move
+  gcode += `G91\n`
+
+  // Helical interpolation loop
+  const numberOfRevolutions = Math.floor(threadDepth / threadPitch);
+  for (let i = 0; i < numberOfRevolutions; i++) {
+    const I = -pathRadius;
+    const J = 0;
+    const Z = threadPitch;
+    gcode += `${helicalDirection} X0. Y0. Z${Z.toFixed(4)} I${I.toFixed(4)} J${J.toFixed(4)} F${feed.toFixed(4)};\n`;
+  }
+
+  // Switch back to absolute
+  gcode += `G90\n`
 
   // Retract from wall and cancel compensation
   gcode += `G01 G40 X0. Y0.;\n`;
 
   // Rapid retract out of the hole
-  gcode += `G00 G90 Z${(zStart + 1.0).toFixed(4)};\n`;
-  gcode += `M05;\n`;
+  gcode += `G00 Z0.1;\n`;
+  gcode += `M05 M09;\n`;
   gcode += `G28 Z0;\n`;
   gcode += `G28 X0 Y0;\n`;
   gcode += `M30;\n`;

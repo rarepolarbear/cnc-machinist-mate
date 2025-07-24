@@ -69,37 +69,28 @@ function generateGCode(data: FormValues): string {
   gcode += `G00 X0. Y0.;\n`;
   gcode += `G43 H01 Z0.1;\n`;
   
-  let currentDepth = 0;
-  let firstPass = true;
-  while (currentDepth < depthOfCut) {
-    currentDepth = Math.min(currentDepth + depthOfCut, depthOfCut);
-
-    // Ramp into the material on the first pass
-    if(firstPass){
-      const rampRadius = toolRadius * 0.5; // Small ramp circle
-      gcode += `G01 Z0. F${feed / 2};\n`; // Position at Z0 before ramp
-      gcode += `${rampGCode} X0. Y0. Z-${currentDepth.toFixed(4)} I${rampRadius.toFixed(4)} J0. F${feed / 2};\n`;
-      firstPass = false;
-    } else {
-       gcode += `G01 Z-${currentDepth.toFixed(4)} F${feed / 2};\n`;
-    }
-
-    let currentRadius = stepover;
-    while (currentRadius < circleRadius) {
-        gcode += `G01 X${(currentRadius-toolRadius).toFixed(4)} Y0.;\n`;
-        gcode += `${compensationGCode} D01 Y0.;\n`
-        gcode += `${directionGCode} X${(currentRadius-toolRadius).toFixed(4)} Y0. I-${(currentRadius-toolRadius).toFixed(4)} J0. F${feed};\n`;
-        gcode += `G01 G40 X0. Y0.;\n`;
-        currentRadius += stepover;
-    }
-
-    // Final pass at full diameter
-    const finalPathRadius = circleRadius - toolRadius;
-    gcode += `G01 X${finalPathRadius.toFixed(4)} Y0.;\n`;
-    gcode += `${compensationGCode} D01 Y0.;\n`
-    gcode += `${directionGCode} X${finalPathRadius.toFixed(4)} Y0. I-${finalPathRadius.toFixed(4)} J0. F${feed};\n`;
-    gcode += `G01 G40 X0. Y0.;\n`;
+  // Helical ramp entry
+  const rampRadius = toolRadius * 0.5; // Small ramp circle
+  gcode += `G01 Z0. F${feed / 2};\n`; // Position at Z0 before ramp
+  gcode += `${rampGCode} X0. Y0. Z-${depthOfCut.toFixed(4)} I${rampRadius.toFixed(4)} J0. F${feed / 2};\n`;
+  
+  // Inside-out pocketing
+  const finalPathRadius = circleRadius - toolRadius;
+  let currentRadius = stepover;
+  
+  while (currentRadius < finalPathRadius) {
+      gcode += `G01 X${currentRadius.toFixed(4)} Y0.;\n`;
+      gcode += `${compensationGCode} D01 Y0.;\n`
+      gcode += `${directionGCode} X${currentRadius.toFixed(4)} Y0. I-${currentRadius.toFixed(4)} J0. F${feed};\n`;
+      gcode += `G01 G40 X0. Y0.;\n`;
+      currentRadius += stepover;
   }
+
+  // Final pass at full diameter
+  gcode += `G01 X${finalPathRadius.toFixed(4)} Y0.;\n`;
+  gcode += `${compensationGCode} D01 Y0.;\n`
+  gcode += `${directionGCode} X${finalPathRadius.toFixed(4)} Y0. I-${finalPathRadius.toFixed(4)} J0. F${feed};\n`;
+  gcode += `G01 G40 X0. Y0.;\n`;
   
   gcode += `G00 Z1.0;\n`;
   gcode += `M05;\n`;

@@ -17,6 +17,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -63,11 +64,12 @@ function generateGCode(data: FormValues): string {
 
   // For internal threads, climb milling is generally preferred.
   // RH Thread => Climb Mill => G03 with G41
-  // LH Thread => Climb Mill => G02 with G42
+  // LH Thread => Climb Mill => G02 with G41
   const helicalDirection = hand === 'rh' ? 'G03' : 'G02'; 
-  const compensationDirection = hand === 'rh' ? 'G41' : 'G42';
+  const compensationDirection = 'G41'; // G41 for internal climb
   
   const zBottom = -threadDepth;
+  const numberOfRevolutions = Math.floor(threadDepth / threadPitch);
 
   let gcode = `(Thread Milling G-Code - ${hand === 'rh' ? 'Right Hand' : 'Left Hand'})\n`;
   gcode += `(Major Dia: ${majorDiameter}, TPI: ${threadsPerInch})\n`;
@@ -78,18 +80,22 @@ function generateGCode(data: FormValues): string {
   gcode += `G00 X0. Y0.;\n`; 
   gcode += `G43 Z0.1 H01 M08;\n`;
   
-  // Rapid to bottom of hole, with a small clearance
-  gcode += `G00 Z${(zBottom - threadPitch).toFixed(4)};\n`;
+  // Rapid to bottom of hole
+  gcode += `G00 Z${zBottom.toFixed(4)};\n`;
   
-  // Move to start X position
-  gcode += `G01 X${pathRadius.toFixed(4)} Y0. F${feed * 2};\n`;
-
-  // Start compensation and move to start of arc
-  gcode += `${compensationDirection} D01 Y0. F${feed};\n`;
-
-  // Helical interpolation upwards
-  gcode += `${helicalDirection} X${pathRadius.toFixed(4)} Y0. Z${(0.1).toFixed(4)} R${pathRadius.toFixed(4)} F${feed};\n`;
-
+  // Move to start X position and turn on compensation
+  gcode += `G01 ${compensationDirection} X${pathRadius.toFixed(4)} D01 F${feed * 2};\n`;
+  
+  // Switch to incremental for looped helical move
+  gcode += `G91;\n`;
+  
+  for (let i = 0; i < numberOfRevolutions; i++) {
+    gcode += `${helicalDirection} X0. Y0. Z${threadPitch.toFixed(4)} I-${pathRadius.toFixed(4)} J0. F${feed};\n`;
+  }
+  
+  // Switch back to absolute
+  gcode += `G90;\n`;
+  
   // Retract from wall and cancel compensation
   gcode += `G01 G40 X0. Y0.;\n`;
 

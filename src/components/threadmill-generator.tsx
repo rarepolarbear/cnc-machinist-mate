@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -71,6 +72,8 @@ function generateGCode(data: FormValues): string {
   const zBottom = -threadDepth;
   const numberOfRevolutions = Math.floor(threadDepth / threadPitch);
 
+  const formatFeed = (f: number) => Number.isInteger(f) ? `${f}.` : f.toString();
+
   let gcode = `(Thread Milling G-Code - ${hand === 'rh' ? 'Right Hand' : 'Left Hand'})\n`;
   gcode += `(Major Dia: ${majorDiameter}, TPI: ${threadsPerInch})\n`;
   gcode += `G20 (INCH MODE)\n`;
@@ -80,17 +83,17 @@ function generateGCode(data: FormValues): string {
   gcode += `G00 X0. Y0.;\n`; 
   gcode += `G43 Z0.1 H01 M08;\n`;
   
-  // Rapid to bottom of hole
+  // Rapid to starting Z position (bottom of the hole)
   gcode += `G00 Z${zBottom.toFixed(4)};\n`;
   
   // Move to start X position and turn on compensation
-  gcode += `G01 ${compensationDirection} X${pathRadius.toFixed(4)} D01 F${feed * 2};\n`;
+  gcode += `G01 ${compensationDirection} X${pathRadius.toFixed(4)} D01 F${formatFeed(feed * 2)};\n`;
   
   // Switch to incremental for looped helical move
   gcode += `G91;\n`;
   
   for (let i = 0; i < numberOfRevolutions; i++) {
-    gcode += `${helicalDirection} X0. Y0. Z${threadPitch.toFixed(4)} I-${pathRadius.toFixed(4)} J0. F${feed};\n`;
+    gcode += `${helicalDirection} X0. Y0. Z${threadPitch.toFixed(4)} I-${pathRadius.toFixed(4)} J0. F${formatFeed(feed)};\n`;
   }
   
   // Switch back to absolute

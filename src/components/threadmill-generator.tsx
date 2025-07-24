@@ -60,7 +60,11 @@ function generateGCode(data: FormValues): string {
   const threadPitch = 1 / threadsPerInch;
   
   const pathRadius = majorRadius - toolRadius;
-  const helicalDirection = hand === 'rh' ? 'G03' : 'G02'; // Climb milling for internal threads
+
+  // For internal threads, climb milling is generally preferred.
+  // RH Thread => Climb Mill => G03 with G41
+  // LH Thread => Climb Mill => G02 with G42
+  const helicalDirection = hand === 'rh' ? 'G03' : 'G02'; 
   const compensationDirection = hand === 'rh' ? 'G41' : 'G42';
   
   const zBottom = -threadDepth;
@@ -68,32 +72,23 @@ function generateGCode(data: FormValues): string {
   let gcode = `(Thread Milling G-Code - ${hand === 'rh' ? 'Right Hand' : 'Left Hand'})\n`;
   gcode += `(Major Dia: ${majorDiameter}, TPI: ${threadsPerInch})\n`;
   gcode += `G20 (INCH MODE)\n`;
-  gcode += `G80 G40 G17\n`
+  gcode += `G90 G17 G40 G80\n`
   gcode += `T1 M06 (SELECT TOOL 1);\n`;
-  gcode += `G90 G54 S${speed} M03;\n`;
+  gcode += `G54 S${speed} M03;\n`;
   gcode += `G00 X0. Y0.;\n`; 
-  gcode += `G43 Z0.1 H1 M08;\n`;
+  gcode += `G43 Z0.1 H01 M08;\n`;
   
-  // Go to bottom of hole
-  gcode += `G00 Z${zBottom.toFixed(4)};\n`;
-
-  // Cutter compensation on, linear move to start of helix arc
-  gcode += `${compensationDirection} D01 G01 X${pathRadius.toFixed(4)} Y0. F${(feed / 2).toFixed(4)};\n`;
+  // Rapid to bottom of hole, with a small clearance
+  gcode += `G00 Z${(zBottom - threadPitch).toFixed(4)};\n`;
   
-  // Switch to incremental for looped helical move
-  gcode += `G91\n`
+  // Move to start X position
+  gcode += `G01 X${pathRadius.toFixed(4)} Y0. F${feed * 2};\n`;
 
-  // Helical interpolation loop
-  const numberOfRevolutions = Math.floor(threadDepth / threadPitch);
-  for (let i = 0; i < numberOfRevolutions; i++) {
-    const I = -pathRadius;
-    const J = 0;
-    const Z = threadPitch;
-    gcode += `${helicalDirection} X0. Y0. Z${Z.toFixed(4)} I${I.toFixed(4)} J${J.toFixed(4)} F${feed.toFixed(4)};\n`;
-  }
+  // Start compensation and move to start of arc
+  gcode += `${compensationDirection} D01 Y0. F${feed};\n`;
 
-  // Switch back to absolute
-  gcode += `G90\n`
+  // Helical interpolation upwards
+  gcode += `${helicalDirection} X${pathRadius.toFixed(4)} Y0. Z${(0.1).toFixed(4)} R${pathRadius.toFixed(4)} F${feed};\n`;
 
   // Retract from wall and cancel compensation
   gcode += `G01 G40 X0. Y0.;\n`;
@@ -101,8 +96,8 @@ function generateGCode(data: FormValues): string {
   // Rapid retract out of the hole
   gcode += `G00 Z0.1;\n`;
   gcode += `M05 M09;\n`;
-  gcode += `G28 Z0;\n`;
-  gcode += `G28 X0 Y0;\n`;
+  gcode += `G91 G28 Z0;\n`;
+  gcode += `G91 G28 X0 Y0;\n`;
   gcode += `M30;\n`;
 
   return gcode;
@@ -189,6 +184,9 @@ export function ThreadMillGenerator() {
                     <FormControl>
                       <Input type="number" step="0.001" {...field} />
                     </FormControl>
+                     <FormDescription>
+                      This is the pre-drilled hole size.
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

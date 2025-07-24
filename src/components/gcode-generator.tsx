@@ -31,6 +31,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+
 
 const formSchema = z.object({
   cutterDiameter: z.coerce.number().positive('Must be positive.'),
@@ -39,48 +41,64 @@ const formSchema = z.object({
   feed: z.coerce.number().positive('Must be positive.'),
   depthOfCut: z.coerce.number().positive('Must be positive.'),
   stepover: z.coerce.number().positive('Must be positive.'),
+  millingDirection: z.enum(['climb', 'conventional']),
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
 function generateGCode(data: FormValues): string {
-  const { cutterDiameter, circleDiameter, speed, feed, depthOfCut, stepover } = data;
+  const { cutterDiameter, circleDiameter, speed, feed, depthOfCut, stepover, millingDirection } = data;
   const toolRadius = cutterDiameter / 2;
   const circleRadius = circleDiameter / 2;
-  const effectiveRadius = circleRadius - toolRadius;
-  const stepoverAmount = stepover;
 
-  if (effectiveRadius <= 0) {
-    return 'Error: Cutter diameter is larger than or equal to the circle diameter.';
+  if (cutterDiameter >= circleDiameter) {
+    return 'Error: Cutter diameter must be smaller than the circle diameter.';
   }
 
+  const directionGCode = millingDirection === 'climb' ? 'G03' : 'G02'; // G03 for climb milling internal pocket
+  const compensationGCode = millingDirection === 'climb' ? 'G41' : 'G42';
+  const rampGCode = millingDirection === 'climb' ? 'G03' : 'G02';
+
   let gcode = `(Circular Interpolation G-Code)\n`;
+  gcode += `(Direction: ${millingDirection === 'climb' ? 'Climb' : 'Conventional'})\n`;
   gcode += `(Cutter Dia: ${cutterDiameter}, Circle Dia: ${circleDiameter})\n`;
   gcode += `G90 G17 G20 G40 G80;\n`;
   gcode += `T1 M06 (SELECT TOOL 1);\n`;
   gcode += `G54;\n`;
   gcode += `M03 S${speed};\n`;
-  gcode += `G00 X${effectiveRadius.toFixed(4)} Y0.;\n`;
+  gcode += `G00 X0. Y0.;\n`;
   gcode += `G43 H01 Z0.1;\n`;
   
   let currentDepth = 0;
+  let firstPass = true;
   while (currentDepth < depthOfCut) {
     currentDepth = Math.min(currentDepth + depthOfCut, depthOfCut);
-    gcode += `G01 Z-${currentDepth.toFixed(4)} F${feed / 2};\n`;
 
-    let currentRadius = effectiveRadius;
-    while (currentRadius > 0) {
-        gcode += `G02 X${currentRadius.toFixed(4)} Y0. I-${currentRadius.toFixed(4)} J0. F${feed};\n`;
-        currentRadius -= stepoverAmount;
-        if(currentRadius > 0) {
-            gcode += `G01 X${currentRadius.toFixed(4)};\n`;
-        } else {
-            // Final cleanup pass at the center
-             gcode += `G01 X0. Y0.;\n`;
-        }
+    // Ramp into the material on the first pass
+    if(firstPass){
+      const rampRadius = toolRadius * 0.5; // Small ramp circle
+      gcode += `G01 Z0. F${feed / 2};\n`; // Position at Z0 before ramp
+      gcode += `${rampGCode} X0. Y0. Z-${currentDepth.toFixed(4)} I${rampRadius.toFixed(4)} J0. F${feed / 2};\n`;
+      firstPass = false;
+    } else {
+       gcode += `G01 Z-${currentDepth.toFixed(4)} F${feed / 2};\n`;
     }
-     // Mill the center point
-    gcode += `G01 X0. Y0.;\n`;
+
+    let currentRadius = stepover;
+    while (currentRadius < circleRadius) {
+        gcode += `G01 X${(currentRadius-toolRadius).toFixed(4)} Y0.;\n`;
+        gcode += `${compensationGCode} D01 Y0.;\n`
+        gcode += `${directionGCode} X${(currentRadius-toolRadius).toFixed(4)} Y0. I-${(currentRadius-toolRadius).toFixed(4)} J0. F${feed};\n`;
+        gcode += `G01 G40 X0. Y0.;\n`;
+        currentRadius += stepover;
+    }
+
+    // Final pass at full diameter
+    const finalPathRadius = circleRadius - toolRadius;
+    gcode += `G01 X${finalPathRadius.toFixed(4)} Y0.;\n`;
+    gcode += `${compensationGCode} D01 Y0.;\n`
+    gcode += `${directionGCode} X${finalPathRadius.toFixed(4)} Y0. I-${finalPathRadius.toFixed(4)} J0. F${feed};\n`;
+    gcode += `G01 G40 X0. Y0.;\n`;
   }
   
   gcode += `G00 Z1.0;\n`;
@@ -105,6 +123,7 @@ export function GCodeGenerator() {
       feed: 20.0,
       depthOfCut: 0.25,
       stepover: 0.2,
+      millingDirection: 'climb',
     },
   });
 
@@ -218,6 +237,36 @@ export function GCodeGenerator() {
                 )}
               />
             </div>
+             <FormField
+                    control={form.control}
+                    name="millingDirection"
+                    render={({ field }) => (
+                        <FormItem className="space-y-3">
+                        <FormLabel>Milling Direction</FormLabel>
+                        <FormControl>
+                            <RadioGroup
+                            onValueChange={field.onChange}
+                            defaultValue={field.value}
+                            className="flex flex-row space-x-4"
+                            >
+                            <FormItem className="flex items-center space-x-2">
+                                <FormControl>
+                                <RadioGroupItem value="climb" />
+                                </FormControl>
+                                <FormLabel className="font-normal">Climb</FormLabel>
+                            </FormItem>
+                            <FormItem className="flex items-center space-x-2">
+                                <FormControl>
+                                <RadioGroupItem value="conventional" />
+                                </FormControl>
+                                <FormLabel className="font-normal">Conventional</FormLabel>
+                            </FormItem>
+                            </RadioGroup>
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                />
             <Button size="lg" type="submit" className="w-full sm:w-auto">
               <Zap className="mr-2 h-5 w-5" />
               Generate G-Code

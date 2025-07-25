@@ -56,17 +56,14 @@ function generateGCode(data: FormValues): string {
   
   const toolRadius = cutterDiameter / 2;
   const finalRadius = circleDiameter / 2;
-  const finalPathRadius = finalRadius - toolRadius;
 
   if (cutterDiameter >= circleDiameter) {
     return 'Error: Cutter diameter must be smaller than the circle diameter.';
   }
-   if (finalPathRadius <= 0) {
-    return 'Error: Cutter is too large for the circle diameter.';
-  }
 
   const formatFeed = (f: number) => Number.isInteger(f) ? `${f}.` : f.toString();
   
+  const compensationDirection = millingDirection === 'climb' ? 'G41' : 'G42';
   const directionGCode = millingDirection === 'climb' ? 'G03' : 'G02';
   
   let gcode = `(Circular Interpolation - Concentric Circles)\n`;
@@ -88,19 +85,22 @@ function generateGCode(data: FormValues): string {
     gcode += `(Pass at Z-${currentDepth.toFixed(4)})\n`;
     
     // Helical ramp to depth at center
-    const rampRadius = Math.min(stepover, finalPathRadius) / 2; // Use a small radius for the ramp
+    const rampRadius = Math.min(stepover, finalRadius - toolRadius) / 2; 
     if (rampRadius > 0) {
         gcode += `G00 Z-${previousDepth.toFixed(4)};\n`;
-        gcode += `G01 X${rampRadius.toFixed(4)} Y0. F${formatFeed(feed)};\n`
-        gcode += `G03 I-${rampRadius.toFixed(4)} J0. Z-${currentDepth.toFixed(4)} F${formatFeed(feed / 2)};\n`; // Helical move to depth
-        gcode += `G01 G41 D01 X${rampRadius.toFixed(4)} F${formatFeed(feed)};\n`; // Engage compensation after ramp
+        gcode += `G01 X0. Y0. F${formatFeed(feed)};\n`
+        gcode += `G01 X${rampRadius.toFixed(4)} F${formatFeed(feed / 2)};\n`;
+        gcode += `${directionGCode} I-${rampRadius.toFixed(4)} J0. Z-${currentDepth.toFixed(4)} F${formatFeed(feed / 2)};\n`; // Helical move to depth
+        gcode += `${directionGCode} I-${rampRadius.toFixed(4)} J0. F${formatFeed(feed)};\n`; // Circle at bottom to flatten
     } else { // If there's no space to ramp (e.g. one pass)
         gcode += `G01 Z-${currentDepth.toFixed(4)} F${formatFeed(feed / 2)};\n`;
-        gcode += `G01 G41 D01 X0. F${formatFeed(feed)};\n`;
     }
+    
+    gcode += `G01 ${compensationDirection} D01 X0. Y0. F${formatFeed(feed)};\n`
 
     // Concentric circles outwards
     let currentRadius = stepover;
+    const finalPathRadius = finalRadius - toolRadius;
     while (currentRadius < finalPathRadius) {
       gcode += `G01 X${currentRadius.toFixed(4)} Y0. F${formatFeed(feed)};\n` // move to start of circle
       gcode += `${directionGCode} I-${currentRadius.toFixed(4)} J0. F${formatFeed(feed)};\n`; // full circle
@@ -156,14 +156,14 @@ export function GCodeGenerator() {
   };
 
   return (
-    <Card className="w-full shadow-lg border-2 border-primary/10">
+    <Card className="w-full shadow-lg bg-card/80 backdrop-blur-sm border-primary/20">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-2xl font-headline">
-          <Cog className="text-primary" />
+        <CardTitle className="flex items-center gap-2 text-2xl font-headline text-primary">
+          <Cog className="text-accent" />
           <span>Circular Interpolation</span>
         </CardTitle>
         <CardDescription>
-          Enter your parameters to generate G-code for milling a circular pocket on a Haas CNC.
+          Enter parameters to generate G-code for milling a circular pocket.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -295,7 +295,7 @@ export function GCodeGenerator() {
                     )}
                 />
             </div>
-            <Button size="lg" type="submit" className="w-full sm:w-auto">
+            <Button size="lg" type="submit" className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
               <Zap className="mr-2 h-5 w-5" />
               Generate G-Code
             </Button>
@@ -310,7 +310,7 @@ export function GCodeGenerator() {
             </h3>
             <div className="space-y-2">
               <Label htmlFor="gcode-output">G-Code Block</Label>
-              <div className="relative rounded-md bg-secondary p-4 font-mono text-sm group">
+              <div className="relative rounded-md bg-secondary/80 p-4 font-code text-sm group">
                 <pre
                   id="gcode-output"
                   className="whitespace-pre-wrap break-all max-h-96 overflow-y-auto"

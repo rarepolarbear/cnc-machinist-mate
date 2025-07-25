@@ -63,14 +63,10 @@ function generateGCode(data: FormValues): string {
   
   const pathRadius = majorRadius - toolRadius;
 
-  // For internal threads, climb milling is generally preferred.
-  // RH Thread => Climb Mill => G03 with G41
-  // LH Thread => Climb Mill => G02 with G41
   const helicalDirection = hand === 'rh' ? 'G03' : 'G02'; 
-  const compensationDirection = 'G41'; // G41 for internal climb
+  const compensationDirection = hand === 'rh' ? 'G41' : 'G42';
   
   const zBottom = -threadDepth;
-  const numberOfRevolutions = Math.floor(threadDepth / threadPitch);
 
   const formatFeed = (f: number) => Number.isInteger(f) ? `${f}.` : f.toString();
 
@@ -83,30 +79,28 @@ function generateGCode(data: FormValues): string {
   gcode += `G00 X0. Y0.;\n`; 
   gcode += `G43 Z0.1 H01 M08;\n`;
   
-  // Rapid to starting Z position (bottom of the hole)
   gcode += `G00 Z${zBottom.toFixed(4)};\n`;
   
-  // Move to start X position and turn on compensation
-  gcode += `G01 ${compensationDirection} X${pathRadius.toFixed(4)} D01 F${formatFeed(feed * 2)};\n`;
+  gcode += `G01 ${compensationDirection} D01 X${pathRadius.toFixed(4)} Y0. F${formatFeed(feed * 2)};\n`;
   
-  // Switch to incremental for looped helical move
   gcode += `G91;\n`;
   
-  for (let i = 0; i < numberOfRevolutions; i++) {
-    gcode += `${helicalDirection} X0. Y0. Z${threadPitch.toFixed(4)} I-${pathRadius.toFixed(4)} J0. F${formatFeed(feed)};\n`;
+  let currentThreadZ = 0;
+  while(currentThreadZ < threadDepth) {
+      const zMove = Math.min(threadPitch, threadDepth - currentThreadZ);
+      gcode += `${helicalDirection} X0. Y0. Z${zMove.toFixed(4)} I-${pathRadius.toFixed(4)} J0. F${formatFeed(feed)};\n`;
+      currentThreadZ += zMove;
   }
   
-  // Switch back to absolute
   gcode += `G90;\n`;
   
-  // Retract from wall and cancel compensation
   gcode += `G01 G40 X0. Y0.;\n`;
 
-  // Rapid retract out of the hole
   gcode += `G00 Z0.1;\n`;
   gcode += `M05 M09;\n`;
   gcode += `G91 G28 Z0;\n`;
   gcode += `G91 G28 X0 Y0;\n`;
+  gcode += `G90;\n`;
   gcode += `M30;\n`;
 
   return gcode;
@@ -120,9 +114,9 @@ export function ThreadMillGenerator() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       threadMillDiameter: 0.4,
-      threadsPerInch: 20, // 20 TPI
-      minorDiameter: 0.4375, // 7/16
-      majorDiameter: 0.5, // 1/2-20
+      threadsPerInch: 20,
+      minorDiameter: 0.4375,
+      majorDiameter: 0.5,
       threadDepth: 0.5,
       speed: 4000,
       feed: 15.0,
@@ -144,14 +138,14 @@ export function ThreadMillGenerator() {
   };
 
   return (
-    <Card className="w-full shadow-lg border-2 border-primary/10">
+    <Card className="w-full shadow-lg bg-card/80 backdrop-blur-sm border-primary/20">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-2xl font-headline">
-          <Cog className="text-primary" />
+        <CardTitle className="flex items-center gap-2 text-2xl font-headline text-primary">
+          <Cog className="text-accent" />
           <span>Thread Milling</span>
         </CardTitle>
         <CardDescription>
-          Enter your parameters to generate G-code for milling internal threads on a Haas CNC.
+          Enter parameters to generate G-code for milling internal threads.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -283,7 +277,7 @@ export function ThreadMillGenerator() {
                     )}
                 />
             </div>
-            <Button size="lg" type="submit" className="w-full sm:w-auto">
+            <Button size="lg" type="submit" className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
               <Zap className="mr-2 h-5 w-5" />
               Generate G-Code
             </Button>
@@ -298,7 +292,7 @@ export function ThreadMillGenerator() {
             </h3>
             <div className="space-y-2">
               <Label htmlFor="gcode-output">G-Code Block</Label>
-              <div className="relative rounded-md bg-secondary p-4 font-mono text-sm group">
+              <div className="relative rounded-md bg-secondary/80 p-4 font-code text-sm group">
                 <pre
                   id="gcode-output"
                   className="whitespace-pre-wrap break-all max-h-96 overflow-y-auto"

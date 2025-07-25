@@ -10,9 +10,9 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        body: ['Inter', 'sans-serif'],
-        headline: ['Inter', 'sans-serif'],
-        code: ['monospace'],
+        body: ['"Share Tech Mono"', 'sans-serif'],
+        headline: ['Orbitron', 'sans-serif'],
+        code: ['"Share Tech Mono"', 'monospace'],
       },
       colors: {
         background: 'hsl(var(--background))',

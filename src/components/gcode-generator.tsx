@@ -40,28 +40,36 @@ const formSchema = z.object({
   circleDiameter: z.coerce.number().positive('Must be positive.'),
   speed: z.coerce.number().int().positive('Must be a positive integer.'),
   feed: z.coerce.number().positive('Must be positive.'),
-  depthOfCut: z.coerce.number().positive('Must be positive.'),
+  totalDepthOfCut: z.coerce.number().positive('Must be positive.'),
+  depthPerPass: z.coerce.number().positive('Must be positive.'),
   stepover: z.coerce.number().positive('Must be positive.'),
   millingDirection: z.enum(['climb', 'conventional']),
+}).refine(data => data.totalDepthOfCut >= data.depthPerPass, {
+    message: "Total depth must be greater than or equal to depth per pass.",
+    path: ["totalDepthOfCut"],
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
 function generateGCode(data: FormValues): string {
-  const { cutterDiameter, circleDiameter, speed, feed, depthOfCut, stepover, millingDirection } = data;
+  const { cutterDiameter, circleDiameter, speed, feed, totalDepthOfCut, depthPerPass, stepover, millingDirection } = data;
+  
   const toolRadius = cutterDiameter / 2;
-  const circleRadius = circleDiameter / 2;
+  const finalRadius = circleDiameter / 2;
+  const finalPathRadius = finalRadius - toolRadius;
 
   if (cutterDiameter >= circleDiameter) {
     return 'Error: Cutter diameter must be smaller than the circle diameter.';
   }
+   if (finalPathRadius <= 0) {
+    return 'Error: Cutter is too large for the circle diameter.';
+  }
 
   const formatFeed = (f: number) => Number.isInteger(f) ? `${f}.` : f.toString();
   
-  const directionGCode = millingDirection === 'climb' ? 'G03' : 'G02'; // G03 for climb milling internal pocket
-  const compensationGCode = millingDirection === 'climb' ? 'G41' : 'G42';
+  const directionGCode = millingDirection === 'climb' ? 'G03' : 'G02';
   
-  let gcode = `(Circular Interpolation G-Code)\n`;
+  let gcode = `(Circular Interpolation - Concentric Circles)\n`;
   gcode += `(Direction: ${millingDirection === 'climb' ? 'Climb' : 'Conventional'})\n`;
   gcode += `(Cutter Dia: ${cutterDiameter}, Circle Dia: ${circleDiameter})\n`;
   gcode += `G90 G17 G20 G40 G80;\n`;
@@ -71,38 +79,46 @@ function generateGCode(data: FormValues): string {
   gcode += `G00 X0. Y0.;\n`;
   gcode += `G43 H01 Z0.1;\n`;
   
-  // Helical ramp entry
-  const rampRadius = toolRadius * 0.5; // Small ramp circle
-  gcode += `G01 Z0. F${formatFeed(feed / 2)};\n`; // Position at Z0 before ramp
-  gcode += `${directionGCode} X0. Y0. Z-${depthOfCut.toFixed(4)} I${rampRadius.toFixed(4)} J0. F${formatFeed(feed / 2)};\n`;
+  let currentDepth = 0;
   
-  // Inside-out pocketing
-  const finalPathRadius = circleRadius - toolRadius;
-  let currentRadius = stepover;
-  
-  // First pass
-  if (currentRadius <= finalPathRadius) {
-    gcode += `G01 ${compensationGCode} D01 X${currentRadius.toFixed(4)} Y0.;\n`
-    gcode += `${directionGCode} X${currentRadius.toFixed(4)} Y0. I-${currentRadius.toFixed(4)} J0. F${formatFeed(feed)};\n`;
-    gcode += `G01 G40 X0. Y0.;\n`;
-  }
-  
-  // Subsequent passes
-  while (currentRadius < finalPathRadius) {
+  while (currentDepth < totalDepthOfCut) {
+    const previousDepth = currentDepth;
+    currentDepth = Math.min(currentDepth + depthPerPass, totalDepthOfCut);
+    
+    gcode += `(Pass at Z-${currentDepth.toFixed(4)})\n`;
+    
+    // Helical ramp to depth at center
+    const rampRadius = Math.min(stepover, finalPathRadius) / 2; // Use a small radius for the ramp
+    if (rampRadius > 0) {
+        gcode += `G00 Z-${previousDepth.toFixed(4)};\n`;
+        gcode += `G01 X${rampRadius.toFixed(4)} Y0. F${formatFeed(feed)};\n`
+        gcode += `G03 I-${rampRadius.toFixed(4)} J0. Z-${currentDepth.toFixed(4)} F${formatFeed(feed / 2)};\n`; // Helical move to depth
+        gcode += `G01 G41 D01 X${rampRadius.toFixed(4)} F${formatFeed(feed)};\n`; // Engage compensation after ramp
+    } else { // If there's no space to ramp (e.g. one pass)
+        gcode += `G01 Z-${currentDepth.toFixed(4)} F${formatFeed(feed / 2)};\n`;
+        gcode += `G01 G41 D01 X0. F${formatFeed(feed)};\n`;
+    }
+
+    // Concentric circles outwards
+    let currentRadius = stepover;
+    while (currentRadius < finalPathRadius) {
+      gcode += `G01 X${currentRadius.toFixed(4)} Y0. F${formatFeed(feed)};\n` // move to start of circle
+      gcode += `${directionGCode} I-${currentRadius.toFixed(4)} J0. F${formatFeed(feed)};\n`; // full circle
       currentRadius += stepover;
-      if (currentRadius > finalPathRadius) {
-          currentRadius = finalPathRadius;
-      }
-      gcode += `G01 ${compensationGCode} D01 X${currentRadius.toFixed(4)} Y0.;\n`;
-      gcode += `${directionGCode} X${currentRadius.toFixed(4)} Y0. I-${currentRadius.toFixed(4)} J0. F${formatFeed(feed)};\n`;
-      gcode += `G01 G40 X0. Y0.;\n`;
-      if (currentRadius === finalPathRadius) break;
+    }
+
+    // Final pass
+    gcode += `G01 X${finalPathRadius.toFixed(4)} Y0. F${formatFeed(feed)};\n`;
+    gcode += `${directionGCode} I-${finalPathRadius.toFixed(4)} J0. F${formatFeed(feed)};\n`;
+
+    gcode += `G01 G40 X0. Y0. F${formatFeed(feed)};\n` // Return to center, cancel compensation
   }
   
   gcode += `G00 Z1.0;\n`;
   gcode += `M05;\n`;
   gcode += `G91 G28 Z0;\n`;
   gcode += `G91 G28 X0 Y0;\n`;
+  gcode += `G90;\n`;
   gcode += `M30;\n`;
 
   return gcode;
@@ -119,7 +135,8 @@ export function GCodeGenerator() {
       circleDiameter: 3.0,
       speed: 3000,
       feed: 20.0,
-      depthOfCut: 0.25,
+      totalDepthOfCut: 0.5,
+      depthPerPass: 0.25,
       stepover: 0.2,
       millingDirection: 'climb',
     },
@@ -207,10 +224,23 @@ export function GCodeGenerator() {
               />
               <FormField
                 control={form.control}
-                name="depthOfCut"
+                name="totalDepthOfCut"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Total Depth of Cut (in)</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.001" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="depthPerPass"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Depth per Pass (in)</FormLabel>
                     <FormControl>
                       <Input type="number" step="0.001" {...field} />
                     </FormControl>
@@ -234,8 +264,7 @@ export function GCodeGenerator() {
                   </FormItem>
                 )}
               />
-            </div>
-             <FormField
+               <FormField
                     control={form.control}
                     name="millingDirection"
                     render={({ field }) => (
@@ -265,6 +294,7 @@ export function GCodeGenerator() {
                         </FormItem>
                     )}
                 />
+            </div>
             <Button size="lg" type="submit" className="w-full sm:w-auto">
               <Zap className="mr-2 h-5 w-5" />
               Generate G-Code

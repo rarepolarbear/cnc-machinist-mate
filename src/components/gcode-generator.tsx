@@ -44,6 +44,8 @@ const formSchema = z.object({
   depthPerPass: z.coerce.number().positive('Must be positive.'),
   stepover: z.coerce.number().positive('Must be positive.'),
   millingDirection: z.enum(['climb', 'conventional']),
+  rPlane: z.coerce.number().positive('Must be positive.'),
+  toolNumber: z.coerce.number().int().positive('Must be a positive integer.'),
 }).refine(data => data.totalDepthOfCut >= data.depthPerPass, {
     message: "Total depth must be greater than or equal to depth per pass.",
     path: ["totalDepthOfCut"],
@@ -52,7 +54,7 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 function generateGCode(data: FormValues): string {
-  const { cutterDiameter, circleDiameter, speed, feed, totalDepthOfCut, depthPerPass, stepover, millingDirection } = data;
+  const { cutterDiameter, circleDiameter, speed, feed, totalDepthOfCut, depthPerPass, stepover, millingDirection, rPlane, toolNumber } = data;
   
   const toolRadius = cutterDiameter / 2;
   const finalRadius = circleDiameter / 2;
@@ -67,14 +69,22 @@ function generateGCode(data: FormValues): string {
   const directionGCode = millingDirection === 'climb' ? 'G03' : 'G02';
   
   let gcode = `(Circular Interpolation - Concentric Circles)\n`;
-  gcode += `(Direction: ${millingDirection === 'climb' ? 'Climb' : 'Conventional'})\n`;
-  gcode += `(Cutter Dia: ${cutterDiameter}, Circle Dia: ${circleDiameter})\n`;
-  gcode += `G90 G17 G20 G40 G80;\n`;
-  gcode += `T1 M06 (SELECT TOOL 1);\n`;
-  gcode += `G54;\n`;
-  gcode += `M03 S${speed};\n`;
-  gcode += `G00 X0. Y0.;\n`;
-  gcode += `G43 H01 Z0.1;\n`;
+  gcode += `(Direction: ${millingDirection === 'climb' ? 'Climb' : 'Conventional'})
+`;
+  gcode += `(Cutter Dia: ${cutterDiameter}, Circle Dia: ${circleDiameter})
+`;
+  gcode += `G90 G17 G20 G40 G80;
+`;
+  gcode += `T${toolNumber} M06 (SELECT TOOL ${toolNumber});
+`;
+  gcode += `G54;
+`;
+  gcode += `M03 S${speed};
+`;
+  gcode += `G00 X0. Y0.;
+`;
+  gcode += `G43 H${toolNumber} Z${rPlane};
+`
   
   let currentDepth = 0;
   
@@ -139,6 +149,8 @@ export function GCodeGenerator() {
       depthPerPass: 0.25,
       stepover: 0.2,
       millingDirection: 'climb',
+      rPlane: 0.1,
+      toolNumber: 1,
     },
   });
 
@@ -294,6 +306,38 @@ export function GCodeGenerator() {
                         </FormItem>
                     )}
                 />
+              <FormField
+                control={form.control}
+                name="rPlane"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>R Plane (Z Start Distance)</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.001" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Defaults to Z0.1.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="toolNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tool Number</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="1" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Changes T and H numbers (e.g., T1 H1).
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             <Button size="lg" type="submit" className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
               <Zap className="mr-2 h-5 w-5" />

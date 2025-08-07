@@ -97,7 +97,8 @@ function generateGCode(data: FormValues): string {
   gcode += `G01 G40 X0. Y0.;\n`;
 
   gcode += `G00 Z0.1;\n`;
-  gcode += `M05 M09;\n`;
+  gcode += `M05;\n`;
+  gcode += `M09;\n`;
   gcode += `G91 G28 Z0;\n`;
   gcode += `G91 G28 X0 Y0;\n`;
   gcode += `G90;\n`;

@@ -38,6 +38,8 @@ const formSchema = z.object({
   speed: z.coerce.number().int().positive(),
   feed: z.coerce.number().positive(),
   hand: z.enum(['rh', 'lh']),
+  rPlane: z.coerce.number().positive('Must be positive.'),
+  toolNumber: z.coerce.number().int().positive('Must be a positive integer.'),
 }).refine(data => data.majorDiameter > data.minorDiameter, {
     message: "Major diameter must be larger than minor diameter.",
     path: ["majorDiameter"],
@@ -55,6 +57,8 @@ function generateGCode(data: FormValues): string {
     speed,
     feed,
     hand,
+    rPlane,
+    toolNumber,
   } = data;
 
   const toolRadius = threadMillDiameter / 2;
@@ -74,12 +78,13 @@ function generateGCode(data: FormValues): string {
   gcode += `(Major Dia: ${majorDiameter}, TPI: ${threadsPerInch})\n`;
   gcode += `G20 (INCH MODE)\n`;
   gcode += `G90 G17 G40 G80\n`
-  gcode += `T1 M06 (SELECT TOOL 1);\n`;
+  gcode += `T${toolNumber} M06 (SELECT TOOL ${toolNumber});\n`;
   gcode += `G54 S${speed} M03;\n`;
   gcode += `G00 X0. Y0.;\n`; 
-  gcode += `G43 Z0.1 H01 M08;\n`;
+  gcode += `G43 Z${rPlane} H${toolNumber} M08;\n`;
   
   gcode += `G00 Z${zBottom.toFixed(4)};\n`;
+
   
   gcode += `G01 ${compensationDirection} D01 X${pathRadius.toFixed(4)} Y0. F${formatFeed(feed * 2)};\n`;
   
@@ -122,6 +127,8 @@ export function ThreadMillGenerator() {
       speed: 4000,
       feed: 15.0,
       hand: 'rh',
+      rPlane: 0.1,
+      toolNumber: 1,
     },
   });
 
@@ -277,6 +284,38 @@ export function ThreadMillGenerator() {
                         </FormItem>
                     )}
                 />
+              <FormField
+                control={form.control}
+                name="rPlane"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>R Plane (Z Start Distance)</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.001" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Defaults to Z0.1.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="toolNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tool Number</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="1" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Changes T and H numbers (e.g., T1 H1).
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             <Button size="lg" type="submit" className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
               <Zap className="mr-2 h-5 w-5" />

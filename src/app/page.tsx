@@ -1,5 +1,6 @@
 import { GCodeGenerator } from '@/components/gcode-generator';
 import { ThreadMillGenerator } from '@/components/threadmill-generator';
+import { DrillingGenerator } from '@/components/drilling-generator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function Home() {
@@ -15,15 +16,19 @@ export default function Home() {
           </p>
         </header>
         <Tabs defaultValue="circular-interpolation" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="circular-interpolation">Circular Interpolation</TabsTrigger>
             <TabsTrigger value="thread-milling">Thread Milling</TabsTrigger>
+            <TabsTrigger value="drilling">Drilling</TabsTrigger>
           </TabsList>
           <TabsContent value="circular-interpolation">
             <GCodeGenerator />
           </TabsContent>
           <TabsContent value="thread-milling">
             <ThreadMillGenerator />
+          </TabsContent>
+          <TabsContent value="drilling">
+            <DrillingGenerator />
           </TabsContent>
         </Tabs>
       </div>

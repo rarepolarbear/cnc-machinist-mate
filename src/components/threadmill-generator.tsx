@@ -85,11 +85,10 @@ function generateGCode(data: FormValues): string {
   
   gcode += `G00 Z${zBottom.toFixed(4)};\n`;
 
-  
-  gcode += `G01 ${compensationDirection} D01 X${pathRadius.toFixed(4)} Y0. F${formatFeed(feed * 2)};\n`;
-  
   gcode += `G91;\n`;
-  
+
+  gcode += `G01 ${compensationDirection} D${toolNumber} X${pathRadius.toFixed(4)} Y0. F${formatFeed(feed * 2)};\n`;
+    
   let currentThreadZ = 0;
   while(currentThreadZ < threadDepth) {
       const zMove = Math.min(threadPitch, threadDepth - currentThreadZ);
@@ -97,10 +96,10 @@ function generateGCode(data: FormValues): string {
       currentThreadZ += zMove;
   }
   
+  gcode += `G01 G40 X-${pathRadius.toFixed(4)} Y0.;\n`;
+
   gcode += `G90;\n`;
   
-  gcode += `G01 G40 X0. Y0.;\n`;
-
   gcode += `G00 Z0.1;\n`;
   gcode += `M05;\n`;
   gcode += `M09;\n`;

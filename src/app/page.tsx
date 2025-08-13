@@ -19,7 +19,7 @@ export default function Home() {
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="circular-interpolation">Circular Interpolation</TabsTrigger>
             <TabsTrigger value="thread-milling">Thread Milling</TabsTrigger>
-            <TabsTrigger value="drilling">Drilling</TabsTrigger>
+            {/* <TabsTrigger value="drilling">Drilling</TabsTrigger> */}
           </TabsList>
           <TabsContent value="circular-interpolation">
             <GCodeGenerator />

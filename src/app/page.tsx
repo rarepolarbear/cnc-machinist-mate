@@ -27,9 +27,9 @@ export default function Home() {
           <TabsContent value="thread-milling">
             <ThreadMillGenerator />
           </TabsContent>
-          <TabsContent value="drilling">
+          {/* <TabsContent value="drilling">
             <DrillingGenerator />
-          </TabsContent>
+          </TabsContent> */}
         </Tabs>
       </div>
     </main>

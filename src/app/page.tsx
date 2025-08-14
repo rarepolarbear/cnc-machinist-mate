@@ -16,7 +16,7 @@ export default function Home() {
           </p>
         </header>
         <Tabs defaultValue="circular-interpolation" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="circular-interpolation">Circular Interpolation</TabsTrigger>
             <TabsTrigger value="thread-milling">Thread Milling</TabsTrigger>
             {/* <TabsTrigger value="drilling">Drilling</TabsTrigger> */}

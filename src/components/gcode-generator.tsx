@@ -124,7 +124,7 @@ function generateGCode(data: FormValues): string {
     gcode += `G01 G40 X0. Y0. F${formatFeed(feed)};\n` // Return to center, cancel compensation
   }
   
-  gcode += `G00 Z1.0;\n`;
+  gcode += `G00 Z${rPlane};\n`;
   gcode += `M05;\n`;
   gcode += `G91 G28 Z0;\n`;
   gcode += `G91 G28 X0 Y0;\n`;

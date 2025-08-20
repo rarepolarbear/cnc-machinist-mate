@@ -91,7 +91,7 @@ function generateGCode(data: FormValues): string {
     
   let currentThreadZ = 0;
   while(currentThreadZ < threadDepth) {
-      const zMove = Math.min(threadPitch, threadDepth - currentThreadZ);
+      const zMove = Math.min(threadPitch, threadDepth);
       gcode += `${helicalDirection} X0. Y0. Z${zMove.toFixed(4)} I-${pathRadius.toFixed(4)} J0. F${formatFeed(feed)};\n`;
       currentThreadZ += zMove;
   }

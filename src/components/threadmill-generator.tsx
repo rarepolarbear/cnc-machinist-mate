@@ -1,20 +1,20 @@
 
-'use client';
+'use client'
 
-import * as React from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { Clipboard, Cog, Check, Zap } from 'lucide-react';
+import * as React from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+import { Clipboard, Cog, Check, Zap } from 'lucide-react'
 
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from '@/components/ui/card'
 import {
   Form,
   FormControl,
@@ -23,11 +23,11 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+} from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 
 const formSchema = z.object({
   threadMillDiameter: z.coerce.number().positive(),
@@ -43,9 +43,9 @@ const formSchema = z.object({
 }).refine(data => data.majorDiameter > data.minorDiameter, {
     message: "Major diameter must be larger than minor diameter.",
     path: ["majorDiameter"],
-});
+})
 
-type FormValues = z.infer<typeof formSchema>;
+type FormValues = z.infer<typeof formSchema>
 
 function generateGCode(data: FormValues): string {
   const {
@@ -59,61 +59,61 @@ function generateGCode(data: FormValues): string {
     hand,
     rPlane,
     toolNumber,
-  } = data;
+  } = data
 
-  const toolRadius = threadMillDiameter / 2;
-  const majorRadius = majorDiameter / 2;
-  const threadPitch = 1 / threadsPerInch;
+  const toolRadius = threadMillDiameter / 2
+  const majorRadius = majorDiameter / 2
+  const threadPitch = 1 / threadsPerInch
   
-  const pathRadius = majorRadius - toolRadius;
+  const pathRadius = majorRadius - toolRadius
 
-  const helicalDirection = hand === 'rh' ? 'G03' : 'G02'; 
-  const compensationDirection = hand === 'rh' ? 'G41' : 'G42';
+  const helicalDirection = hand === 'rh' ? 'G03' : 'G02' 
+  const compensationDirection = hand === 'rh' ? 'G41' : 'G42'
   
-  const zBottom = -threadDepth;
+  const zBottom = -threadDepth
 
-  const formatFeed = (f: number) => Number.isInteger(f) ? `${f}.` : f.toString();
+  const formatFeed = (f: number) => Number.isInteger(f) ? `${f}.` : f.toString()
 
-  let gcode = `(Thread Milling G-Code - ${hand === 'rh' ? 'Right Hand' : 'Left Hand'})\n`;
-  gcode += `(Major Dia: ${majorDiameter}, TPI: ${threadsPerInch})\n`;
-  gcode += `G20 (INCH MODE)\n`;
+  let gcode = `(Thread Milling G-Code - ${hand === 'rh' ? 'Right Hand' : 'Left Hand'})\n`
+  gcode += `(Major Dia: ${majorDiameter}, TPI: ${threadsPerInch})\n`
+  gcode += `G20 (INCH MODE)\n`
   gcode += `G90 G17 G40 G80\n`
-  gcode += `T${toolNumber} M06 (SELECT TOOL ${toolNumber});\n`;
-  gcode += `G54 S${speed} M03;\n`;
-  gcode += `G00 X0. Y0.;\n`; 
-  gcode += `G43 Z${rPlane} H${toolNumber} M08;\n`;
+  gcode += `T${toolNumber} M06 (SELECT TOOL ${toolNumber})\n`
+  gcode += `G54 S${speed} M03\n`
+  gcode += `G1 X0. Y0. F${formatFeed}\n` 
+  gcode += `G43 Z${rPlane} H${toolNumber} M08\n`
   
-  gcode += `G00 Z${zBottom.toFixed(4)};\n`;
+  gcode += `G00 Z${zBottom.toFixed(4)}\n`
 
-  gcode += `G91;\n`;
+  gcode += `G91\n`
 
-  gcode += `G01 ${compensationDirection} D${toolNumber} X${pathRadius.toFixed(4)} Y0. F${formatFeed(feed * 2)};\n`;
+  gcode += `G01 ${compensationDirection} D${toolNumber} X${pathRadius.toFixed(4)} Y0. F${formatFeed}\n`
     
-  let currentThreadZ = 0;
+  let currentThreadZ = 0
   while(currentThreadZ < threadDepth) {
-      const zMove = Math.min(threadPitch, threadDepth);
-      gcode += `${helicalDirection} X0. Y0. Z${zMove.toFixed(4)} I-${pathRadius.toFixed(4)} J0. F${formatFeed(feed)};\n`;
-      currentThreadZ += zMove;
+      const zMove = Math.min(threadPitch, threadDepth)
+      gcode += `${helicalDirection} X0. Y0. Z${zMove.toFixed(4)} I-${pathRadius.toFixed(4)} J0. F${formatFeed(feed)}\n`
+      currentThreadZ += zMove
   }
   
-  gcode += `G01 G40 X-${pathRadius.toFixed(4)} Y0.;\n`;
+  gcode += `G01 G40 X-${pathRadius.toFixed(4)} Y0.\n`
 
-  gcode += `G90;\n`;
+  gcode += `G90\n`
   
-  gcode += `G00 Z${rPlane};\n`;
-  gcode += `M05;\n`;
-  gcode += `M09;\n`;
-  gcode += `G91 G28 Z0;\n`;
-  gcode += `G91 G28 X0 Y0;\n`;
-  gcode += `G90;\n`;
-  gcode += `M30;\n`;
+  gcode += `G00 Z${rPlane}\n`
+  gcode += `M05\n`
+  gcode += `M09\n`
+  gcode += `G91 G28 Z0\n`
+  gcode += `G91 G28 X0 Y0\n`
+  gcode += `G90\n`
+  gcode += `M30\n`
 
-  return gcode;
+  return gcode
 }
 
 export function ThreadMillGenerator() {
-  const [gCode, setGCode] = React.useState<string | null>(null);
-  const [copied, setCopied] = React.useState(false);
+  const [gCode, setGCode] = React.useState<string | null>(null)
+  const [copied, setCopied] = React.useState(false)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -129,20 +129,20 @@ export function ThreadMillGenerator() {
       rPlane: 0.1,
       toolNumber: 1,
     },
-  });
+  })
 
   function onSubmit(values: FormValues) {
-    const generatedCode = generateGCode(values);
-    setGCode(generatedCode);
+    const generatedCode = generateGCode(values)
+    setGCode(generatedCode)
   }
 
   const handleCopy = () => {
     if (gCode) {
-      navigator.clipboard.writeText(gCode);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      navigator.clipboard.writeText(gCode)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
     }
-  };
+  }
 
   return (
     <Card className="w-full shadow-lg bg-card/80 backdrop-blur-sm border-primary/20">
@@ -357,5 +357,5 @@ export function ThreadMillGenerator() {
         )}
       </CardContent>
     </Card>
-  );
+  )
 }

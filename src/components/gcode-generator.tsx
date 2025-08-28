@@ -1,25 +1,25 @@
 
-'use client';
+'use client'
 
-import * as React from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import * as React from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import {
   Clipboard,
   Cog,
   Check,
   Zap,
-} from 'lucide-react';
+} from 'lucide-react'
 
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from '@/components/ui/card'
 import {
   Form,
   FormControl,
@@ -28,11 +28,11 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+} from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 
 
 const formSchema = z.object({
@@ -49,94 +49,94 @@ const formSchema = z.object({
 }).refine(data => data.totalDepthOfCut >= data.depthPerPass, {
     message: "Total depth must be greater than or equal to depth per pass.",
     path: ["totalDepthOfCut"],
-});
+})
 
-type FormValues = z.infer<typeof formSchema>;
+type FormValues = z.infer<typeof formSchema>
 
 function generateGCode(data: FormValues): string {
-  const { cutterDiameter, circleDiameter, speed, feed, totalDepthOfCut, depthPerPass, stepover, millingDirection, rPlane, toolNumber } = data;
+  const { cutterDiameter, circleDiameter, speed, feed, totalDepthOfCut, depthPerPass, stepover, millingDirection, rPlane, toolNumber } = data
   
-  const toolRadius = cutterDiameter / 2;
-  const finalRadius = circleDiameter / 2;
+  const toolRadius = cutterDiameter / 2
+  const finalRadius = circleDiameter / 2
 
   if (cutterDiameter >= circleDiameter) {
-    return 'Error: Cutter diameter must be smaller than the circle diameter.';
+    return 'Error: Cutter diameter must be smaller than the circle diameter.'
   }
 
-  const formatFeed = (f: number) => Number.isInteger(f) ? `${f}.` : f.toString();
+  const formatFeed = (f: number) => Number.isInteger(f) ? `${f}.` : f.toString()
   
-  const compensationDirection = millingDirection === 'climb' ? 'G41' : 'G42';
-  const directionGCode = millingDirection === 'climb' ? 'G03' : 'G02';
+  const compensationDirection = millingDirection === 'climb' ? 'G41' : 'G42'
+  const directionGCode = millingDirection === 'climb' ? 'G03' : 'G02'
   
-  let gcode = `(Circular Interpolation - Concentric Circles)\n`;
+  let gcode = `(Circular Interpolation - Concentric Circles)\n`
   gcode += `(Direction: ${millingDirection === 'climb' ? 'Climb' : 'Conventional'})
-`;
+`
   gcode += `(Cutter Dia: ${cutterDiameter}, Circle Dia: ${circleDiameter})
-`;
-  gcode += `G90 G17 G20 G40 G80;
-`;
-  gcode += `T${toolNumber} M06 (SELECT TOOL ${toolNumber});
-`;
-  gcode += `G54;
-`;
-  gcode += `M03 S${speed};
-`;
-  gcode += `G00 X0. Y0.;
-`;
-  gcode += `G43 H${toolNumber} Z${rPlane};
+`
+  gcode += `G90 G17 G20 G40 G80
+`
+  gcode += `T${toolNumber} M06 (SELECT TOOL ${toolNumber})
+`
+  gcode += `G54
+`
+  gcode += `M03 S${speed}
+`
+  gcode += `G00 X0. Y0.
+`
+  gcode += `G43 H${toolNumber} Z${rPlane}
 `
   
-  let currentDepth = 0;
+  let currentDepth = 0
   
   while (currentDepth < totalDepthOfCut) {
-    const previousDepth = currentDepth;
-    currentDepth = Math.min(currentDepth + depthPerPass, totalDepthOfCut);
+    const previousDepth = currentDepth
+    currentDepth = Math.min(currentDepth + depthPerPass, totalDepthOfCut)
     
-    gcode += `(Pass at Z-${currentDepth.toFixed(4)})\n`;
+    gcode += `(Pass at Z-${currentDepth.toFixed(4)})\n`
     
     // Helical ramp to depth at center
-    const rampRadius = Math.min(stepover, finalRadius - toolRadius) / 2; 
+    const rampRadius = Math.min(stepover, finalRadius - toolRadius) / 2 
     if (rampRadius > 0) {
-        gcode += `G00 Z-${previousDepth.toFixed(4)};\n`;
-        gcode += `G01 X0. Y0. F${formatFeed(feed)};\n`
-        gcode += `G01 X${rampRadius.toFixed(4)} F${formatFeed(feed / 2)};\n`;
-        gcode += `${directionGCode} I-${rampRadius.toFixed(4)} J0. Z-${currentDepth.toFixed(4)} F${formatFeed(feed / 2)};\n`; // Helical move to depth
-        gcode += `${directionGCode} I-${rampRadius.toFixed(4)} J0. F${formatFeed(feed)};\n`; // Circle at bottom to flatten
+        gcode += `G00 Z-${previousDepth.toFixed(4)}\n`
+        gcode += `G01 X0. Y0. F${formatFeed(feed)}\n`
+        gcode += `G01 X${rampRadius.toFixed(4)} F${formatFeed(feed / 2)}\n`
+        gcode += `${directionGCode} I-${rampRadius.toFixed(4)} J0. Z-${currentDepth.toFixed(4)} F${formatFeed(feed / 2)}\n` // Helical move to depth
+        gcode += `${directionGCode} I-${rampRadius.toFixed(4)} J0. F${formatFeed(feed)}\n` // Circle at bottom to flatten
     } else { // If there's no space to ramp (e.g. one pass)
-        gcode += `G01 Z-${currentDepth.toFixed(4)} F${formatFeed(feed / 2)};\n`;
+        gcode += `G01 Z-${currentDepth.toFixed(4)} F${formatFeed(feed / 2)}\n`
     }
     
-    gcode += `G01 ${compensationDirection} D01 X0. Y0. F${formatFeed(feed)};\n`
+    gcode += `G01 ${compensationDirection} D01 X0. Y0. F${formatFeed(feed)}\n`
 
     // Concentric circles outwards
-    let currentRadius = stepover;
-    const finalPathRadius = finalRadius - toolRadius;
+    let currentRadius = stepover
+    const finalPathRadius = finalRadius - toolRadius
     while (currentRadius < finalPathRadius) {
-      gcode += `G01 X${currentRadius.toFixed(4)} Y0. F${formatFeed(feed)};\n` // move to start of circle
-      gcode += `${directionGCode} I-${currentRadius.toFixed(4)} J0. F${formatFeed(feed)};\n`; // full circle
-      currentRadius += stepover;
+      gcode += `G01 X${currentRadius.toFixed(4)} Y0. F${formatFeed(feed)}\n` // move to start of circle
+      gcode += `${directionGCode} I-${currentRadius.toFixed(4)} J0. F${formatFeed(feed)}\n` // full circle
+      currentRadius += stepover
     }
 
     // Final pass
-    gcode += `G01 X${finalPathRadius.toFixed(4)} Y0. F${formatFeed(feed)};\n`;
-    gcode += `${directionGCode} I-${finalPathRadius.toFixed(4)} J0. F${formatFeed(feed)};\n`;
+    gcode += `G01 X${finalPathRadius.toFixed(4)} Y0. F${formatFeed(feed)}\n`
+    gcode += `${directionGCode} I-${finalPathRadius.toFixed(4)} J0. F${formatFeed(feed)}\n`
 
-    gcode += `G01 G40 X0. Y0. F${formatFeed(feed)};\n` // Return to center, cancel compensation
+    gcode += `G01 G40 X0. Y0. F${formatFeed(feed)}\n` // Return to center, cancel compensation
   }
   
-  gcode += `G00 Z${rPlane};\n`;
-  gcode += `M05;\n`;
-  gcode += `G91 G28 Z0;\n`;
-  gcode += `G91 G28 X0 Y0;\n`;
-  gcode += `G90;\n`;
-  gcode += `M30;\n`;
+  gcode += `G00 Z${rPlane}\n`
+  gcode += `M05\n`
+  gcode += `G91 G28 Z0\n`
+  gcode += `G91 G28 X0 Y0\n`
+  gcode += `G90\n`
+  gcode += `M30\n`
 
-  return gcode;
+  return gcode
 }
 
 export function GCodeGenerator() {
-  const [gCode, setGCode] = React.useState<string | null>(null);
-  const [copied, setCopied] = React.useState(false);
+  const [gCode, setGCode] = React.useState<string | null>(null)
+  const [copied, setCopied] = React.useState(false)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -152,20 +152,20 @@ export function GCodeGenerator() {
       rPlane: 0.1,
       toolNumber: 1,
     },
-  });
+  })
 
   function onSubmit(values: FormValues) {
-    const generatedCode = generateGCode(values);
-    setGCode(generatedCode);
+    const generatedCode = generateGCode(values)
+    setGCode(generatedCode)
   }
 
   const handleCopy = () => {
     if (gCode) {
-      navigator.clipboard.writeText(gCode);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      navigator.clipboard.writeText(gCode)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
     }
-  };
+  }
 
   return (
     <Card className="w-full shadow-lg bg-card/80 backdrop-blur-sm border-primary/20">
@@ -380,5 +380,5 @@ export function GCodeGenerator() {
         )}
       </CardContent>
     </Card>
-  );
+  )
 }

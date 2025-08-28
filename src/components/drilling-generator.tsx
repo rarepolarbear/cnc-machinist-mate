@@ -1,25 +1,25 @@
 
-'use client';
+'use client'
 
-import * as React from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import * as React from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import {
   Clipboard,
   Cog,
   Check,
   Zap,
-} from 'lucide-react';
+} from 'lucide-react'
 
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from '@/components/ui/card'
 import {
   Form,
   FormControl,
@@ -28,11 +28,11 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Separator } from '@/components/ui/separator';
+} from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Separator } from '@/components/ui/separator'
 
 const formSchema = z.object({
   speed: z.coerce.number().int().positive('Must be a positive integer.'),
@@ -43,62 +43,62 @@ const formSchema = z.object({
   rPlane: z.coerce.number().positive('Must be positive.'),
   totalDepth: z.coerce.number().positive('Must be positive.'),
   coolant: z.enum(['on', 'off']),
-});
+})
 
-type FormValues = z.infer<typeof formSchema>;
+type FormValues = z.infer<typeof formSchema>
 
 function generateGCode(data: FormValues): string {
-  const { speed, feed, toolNumber, holeDiameter, peckAmount, rPlane, totalDepth, coolant } = data;
+  const { speed, feed, toolNumber, holeDiameter, peckAmount, rPlane, totalDepth, coolant } = data
 
-  const formatFeed = (f: number) => Number.isInteger(f) ? `${f}.` : f.toString();
+  const formatFeed = (f: number) => Number.isInteger(f) ? `${f}.` : f.toString()
 
   let gcode = `(Drilling Cycle - G83)
-`;
-  gcode += `(Hole Dia: ${holeDiameter})
-`;
-  gcode += `G90 G17 G20 G40 G80;
-`;
-  gcode += `T${toolNumber} M06 (SELECT TOOL ${toolNumber});
-`;
-  gcode += `G54;
-`;
-  gcode += `M03 S${speed};
-`;
-  if (coolant === 'on') {
-    gcode += `M08;
-`;
-  }
-  gcode += `G00 X0. Y0.;
-`;
-  gcode += `G43 H${toolNumber} Z${rPlane};
-`;
-  gcode += `G83 Z-${totalDepth.toFixed(4)} Q${peckAmount.toFixed(4)} R${rPlane.toFixed(4)} F${formatFeed(feed)};
-`;
-  gcode += `G80;
 `
-  gcode += `G00 Z1.0;
-`;
+  gcode += `(Hole Dia: ${holeDiameter})
+`
+  gcode += `G90 G17 G20 G40 G80
+`
+  gcode += `T${toolNumber} M06 (SELECT TOOL ${toolNumber})
+`
+  gcode += `G54
+`
+  gcode += `M03 S${speed}
+`
   if (coolant === 'on') {
-    gcode += `M09;
-`;
+    gcode += `M08
+`
   }
-  gcode += `M05;
-`;
-  gcode += `G91 G28 Z0;
-`;
-  gcode += `G91 G28 X0 Y0;
-`;
-  gcode += `G90;
-`;
-  gcode += `M30;
-`;
+  gcode += `G00 X0. Y0.
+`
+  gcode += `G43 H${toolNumber} Z${rPlane}
+`
+  gcode += `G83 Z-${totalDepth.toFixed(4)} Q${peckAmount.toFixed(4)} R${rPlane.toFixed(4)} F${formatFeed(feed)}
+`
+  gcode += `G80
+`
+  gcode += `G00 Z1.0
+`
+  if (coolant === 'on') {
+    gcode += `M09
+`
+  }
+  gcode += `M05
+`
+  gcode += `G91 G28 Z0
+`
+  gcode += `G91 G28 X0 Y0
+`
+  gcode += `G90
+`
+  gcode += `M30
+`
 
-  return gcode;
+  return gcode
 }
 
 export function DrillingGenerator() {
-  const [gCode, setGCode] = React.useState<string | null>(null);
-  const [copied, setCopied] = React.useState(false);
+  const [gCode, setGCode] = React.useState<string | null>(null)
+  const [copied, setCopied] = React.useState(false)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -112,20 +112,20 @@ export function DrillingGenerator() {
       totalDepth: 0.5,
       coolant: 'on',
     },
-  });
+  })
 
   function onSubmit(values: FormValues) {
-    const generatedCode = generateGCode(values);
-    setGCode(generatedCode);
+    const generatedCode = generateGCode(values)
+    setGCode(generatedCode)
   }
 
   const handleCopy = () => {
     if (gCode) {
-      navigator.clipboard.writeText(gCode);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      navigator.clipboard.writeText(gCode)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
     }
-  };
+  }
 
   return (
     <Card className="w-full shadow-lg bg-card/80 backdrop-blur-sm border-primary/20">
@@ -314,5 +314,5 @@ export function DrillingGenerator() {
         )}
       </CardContent>
     </Card>
-  );
+  )
 }

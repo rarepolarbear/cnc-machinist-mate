@@ -80,10 +80,10 @@ function generateGCode(data: FormValues): string {
   gcode += `G90 G17 G40 G80\n`
   gcode += `T${toolNumber} M06 (SELECT TOOL ${toolNumber})\n`
   gcode += `G54 S${speed} M03\n`
-  gcode += `G1 X0. Y0. F${formatFeed(feed)}\n` 
+  gcode += `G0 X0. Y0.\n` 
   gcode += `G43 Z${rPlane} H${toolNumber} M08\n`
   
-  gcode += `G01 Z${zBottom.toFixed(4)}\n`
+  gcode += `G01 Z${zBottom.toFixed(4)} F${formatFeed(feed)}\n`
 
   gcode += `G91\n`
 

@@ -80,14 +80,14 @@ function generateGCode(data: FormValues): string {
   gcode += `G90 G17 G40 G80\n`
   gcode += `T${toolNumber} M06 (SELECT TOOL ${toolNumber})\n`
   gcode += `G54 S${speed} M03\n`
-  gcode += `G1 X0. Y0. F${formatFeed}\n` 
+  gcode += `G1 X0. Y0. F${formatFeed(feed)}\n` 
   gcode += `G43 Z${rPlane} H${toolNumber} M08\n`
   
-  gcode += `G00 Z${zBottom.toFixed(4)}\n`
+  gcode += `G01 Z${zBottom.toFixed(4)}\n`
 
   gcode += `G91\n`
 
-  gcode += `G01 ${compensationDirection} D${toolNumber} X${pathRadius.toFixed(4)} Y0. F${formatFeed}\n`
+  gcode += `G01 ${compensationDirection} D${toolNumber} X${pathRadius.toFixed(4)} Y0. F${formatFeed(feed)}\n`
     
   let currentThreadZ = 0
   while(currentThreadZ < threadDepth) {

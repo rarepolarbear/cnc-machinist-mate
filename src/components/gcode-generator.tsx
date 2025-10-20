@@ -106,7 +106,7 @@ function generateGCode(data: FormValues): string {
         gcode += `G01 Z-${currentDepth.toFixed(4)} F${formatFeed(feed / 2)}\n`
     }
     
-    gcode += `G01 ${compensationDirection} D01 X0. Y0. F${formatFeed(feed)}\n`
+    gcode += `G01 ${compensationDirection} D${toolNumber} X0. Y0. F${formatFeed(feed)}\n`
 
     // Concentric circles outwards
     let currentRadius = stepover

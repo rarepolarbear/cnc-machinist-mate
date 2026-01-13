@@ -87,7 +87,7 @@ function generateGCode(data: FormValues): string {
   let radialStep = radialCutAmount / passes
   radialStep = Math.min(Math.abs(radialStep), maxStep)
   // I parameter per helical move: absolute nominal radial step divided by number of passes
-  const iValue = Math.abs(nominalRadialStep) / passes
+  const iValue = Math.abs(pathRadius) / passes
   
   const zBottom = -threadDepth
 

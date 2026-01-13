@@ -101,6 +101,7 @@ function generateGCode(data: FormValues): string {
 
   for (let pass = 0; pass < passes; pass++) {
     const thisRadius = pathRadius - pass * radialStep
+    gcode += `(Pass ${pass + 1})\n`
     gcode += `G01 ${compensationDirection} D${toolNumber} X${thisRadius.toFixed(4)} Y0. F${formatFeed(feed)}\n`
 
     let currentThreadZ = 0

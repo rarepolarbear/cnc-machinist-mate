@@ -99,10 +99,11 @@ function generateGCode(data: FormValues): string {
 
   gcode += `G91\n`
 
-  // Build radii for each radial pass, then sort ascending so the smallest I (closest center)
-  // is generated first to ensure the tool "steps in" correctly.
+  // Build radii for each radial pass, then sort by absolute value ascending so the
+  // smallest I (smallest absolute radius) is generated first to ensure the tool
+  // "steps in" correctly.
   const radii = Array.from({ length: passes }, (_, i) => pathRadius - i * radialStep)
-  radii.sort((a, b) => a - b)
+  radii.sort((a, b) => Math.abs(a) - Math.abs(b))
 
   radii.forEach((thisRadius, idx) => {
     gcode += `(Pass ${idx + 1})\n`

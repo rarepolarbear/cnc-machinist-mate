@@ -9,6 +9,13 @@ import { Clipboard, Cog, Check, Zap } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Card,
   CardContent,
   CardDescription,
@@ -40,6 +47,7 @@ const formSchema = z.object({
   hand: z.enum(['rh', 'lh']),
   rPlane: z.coerce.number().positive('Must be positive.'),
   toolNumber: z.coerce.number().int().positive('Must be a positive integer.'),
+  radialPasses: z.coerce.number().int().min(1).max(5),
 }).refine(data => data.majorDiameter > data.minorDiameter, {
     message: "Major diameter must be larger than minor diameter.",
     path: ["majorDiameter"],
@@ -59,6 +67,7 @@ function generateGCode(data: FormValues): string {
     hand,
     rPlane,
     toolNumber,
+    radialPasses,
   } = data
 
   const toolRadius = threadMillDiameter / 2
@@ -67,8 +76,11 @@ function generateGCode(data: FormValues): string {
   
   const pathRadius = majorRadius - toolRadius
 
-  const helicalDirection = hand === 'rh' ? 'G03' : 'G02' 
+  const helicalDirection = hand === 'rh' ? 'G03' : 'G02'
   const compensationDirection = hand === 'rh' ? 'G41' : 'G42'
+  const passes = radialPasses || 1
+  const radialCutAmount = toolRadius
+  const radialStep = radialCutAmount / passes
   
   const zBottom = -threadDepth
 
@@ -87,16 +99,19 @@ function generateGCode(data: FormValues): string {
 
   gcode += `G91\n`
 
-  gcode += `G01 ${compensationDirection} D${toolNumber} X${pathRadius.toFixed(4)} Y0. F${formatFeed(feed)}\n`
-    
-  let currentThreadZ = 0
-  while(currentThreadZ < threadDepth) {
-      const zMove = Math.min(threadPitch, threadDepth)
-      gcode += `${helicalDirection} X0. Y0. Z${zMove.toFixed(4)} I-${pathRadius.toFixed(4)} J0. F${formatFeed(feed)}\n`
+  for (let pass = 0; pass < passes; pass++) {
+    const thisRadius = pathRadius - pass * radialStep
+    gcode += `G01 ${compensationDirection} D${toolNumber} X${thisRadius.toFixed(4)} Y0. F${formatFeed(feed)}\n`
+
+    let currentThreadZ = 0
+    while (currentThreadZ < threadDepth) {
+      const zMove = Math.min(threadPitch, threadDepth - currentThreadZ)
+      gcode += `${helicalDirection} X0. Y0. Z${zMove.toFixed(4)} I-${thisRadius.toFixed(4)} J0. F${formatFeed(feed)}\n`
       currentThreadZ += zMove
+    }
+
+    gcode += `G01 G40 X-${thisRadius.toFixed(4)} Y0.\n`
   }
-  
-  gcode += `G01 G40 X-${pathRadius.toFixed(4)} Y0.\n`
 
   gcode += `G90\n`
   
@@ -128,6 +143,7 @@ export function ThreadMillGenerator() {
       hand: 'rh',
       rPlane: 0.1,
       toolNumber: 1,
+      radialPasses: 1,
     },
   })
 
@@ -311,6 +327,34 @@ export function ThreadMillGenerator() {
                     <FormDescription>
                       Changes T and H numbers (e.g., T1 H1).
                     </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="radialPasses"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Radial Passes</FormLabel>
+                    <FormControl>
+                      <Select
+                        onValueChange={(v) => field.onChange(Number(v))}
+                        defaultValue={String(field.value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">1</SelectItem>
+                          <SelectItem value="2">2</SelectItem>
+                          <SelectItem value="3">3</SelectItem>
+                          <SelectItem value="4">4</SelectItem>
+                          <SelectItem value="5">5</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormDescription>Number of radial passes (1-5). Default 1.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

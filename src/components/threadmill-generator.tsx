@@ -80,7 +80,12 @@ function generateGCode(data: FormValues): string {
   const compensationDirection = hand === 'rh' ? 'G41' : 'G42'
   const passes = radialPasses || 1
   const radialCutAmount = toolRadius
-  const radialStep = radialCutAmount / passes
+  // Nominal radial step limit (default 1). Ensure per-pass radial step magnitude
+  // does not exceed this value.
+  const nominalRadialStep = 1
+  const maxStep = Math.abs(nominalRadialStep)
+  let radialStep = radialCutAmount / passes
+  radialStep = Math.min(Math.abs(radialStep), maxStep)
   
   const zBottom = -threadDepth
 

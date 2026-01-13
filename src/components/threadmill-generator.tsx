@@ -99,20 +99,24 @@ function generateGCode(data: FormValues): string {
 
   gcode += `G91\n`
 
-  for (let pass = 0; pass < passes; pass++) {
-    const thisRadius = pathRadius - pass * radialStep
-    gcode += `(Pass ${pass + 1})\n`
+  // Build radii for each radial pass, then sort ascending so the smallest I (closest center)
+  // is generated first to ensure the tool "steps in" correctly.
+  const radii = Array.from({ length: passes }, (_, i) => pathRadius - i * radialStep)
+  radii.sort((a, b) => a - b)
+
+  radii.forEach((thisRadius, idx) => {
+    gcode += `(Pass ${idx + 1})\n`
     gcode += `G01 ${compensationDirection} D${toolNumber} X${thisRadius.toFixed(4)} Y0. F${formatFeed(feed)}\n`
 
     let currentThreadZ = 0
     while (currentThreadZ < threadDepth) {
       const zMove = Math.min(threadPitch, threadDepth - currentThreadZ)
-      gcode += `${helicalDirection} X0. Y0. Z${zMove.toFixed(4)} I-${thisRadius.toFixed(4)} J0. F${formatFeed(feed)}\n`
+      gcode += `${helicalDirection} X0. Y0. Z${zMove.toFixed(4)} I-${Math.abs(thisRadius).toFixed(4)} J0. F${formatFeed(feed)}\n`
       currentThreadZ += zMove
     }
 
     gcode += `G01 G40 X-${thisRadius.toFixed(4)} Y0.\n`
-  }
+  })
 
   gcode += `G90\n`
   

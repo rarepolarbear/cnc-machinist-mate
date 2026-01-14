@@ -1,4 +1,3 @@
-
 'use client'
 
 import * as React from 'react'
@@ -8,13 +7,6 @@ import { z } from 'zod'
 import { Clipboard, Cog, Check, Zap } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectTrigger,
-  SelectContent,
-  SelectItem,
-  SelectValue,
-} from '@/components/ui/select'
 import {
   Card,
   CardContent,
@@ -31,6 +23,13 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
@@ -47,7 +46,7 @@ const formSchema = z.object({
   hand: z.enum(['rh', 'lh']),
   rPlane: z.coerce.number().positive('Must be positive.'),
   toolNumber: z.coerce.number().int().positive('Must be a positive integer.'),
-  radialPasses: z.coerce.number().int().min(1).max(5),
+  radialSteps: z.coerce.number().int().min(1).max(5).default(1),
 }).refine(data => data.majorDiameter > data.minorDiameter, {
     message: "Major diameter must be larger than minor diameter.",
     path: ["majorDiameter"],
@@ -67,27 +66,18 @@ function generateGCode(data: FormValues): string {
     hand,
     rPlane,
     toolNumber,
-    radialPasses,
+    radialSteps,
   } = data
 
   const toolRadius = threadMillDiameter / 2
   const majorRadius = majorDiameter / 2
   const threadPitch = 1 / threadsPerInch
   
-  const pathRadius = majorRadius - toolRadius
+  // This is the final target radius offset
+  const totalPathRadius = majorRadius - toolRadius
 
-  const helicalDirection = hand === 'rh' ? 'G03' : 'G02'
+  const helicalDirection = hand === 'rh' ? 'G03' : 'G02' 
   const compensationDirection = hand === 'rh' ? 'G41' : 'G42'
-  const passes = radialPasses || 1
-  const radialCutAmount = toolRadius
-  // Nominal radial step limit (default 1). Ensure per-pass radial step magnitude
-  // does not exceed this value.
-  const nominalRadialStep = 1
-  const maxStep = Math.abs(nominalRadialStep)
-  let radialStep = radialCutAmount / passes
-  radialStep = Math.min(Math.abs(radialStep), maxStep)
-  // I parameter per helical move: absolute nominal radial step divided by number of passes
-  const iValue = Math.abs(pathRadius) / passes
   
   const zBottom = -threadDepth
 
@@ -95,6 +85,7 @@ function generateGCode(data: FormValues): string {
 
   let gcode = `(Thread Milling G-Code - ${hand === 'rh' ? 'Right Hand' : 'Left Hand'})\n`
   gcode += `(Major Dia: ${majorDiameter}, TPI: ${threadsPerInch})\n`
+  gcode += `(Radial Steps: ${radialSteps})\n`
   gcode += `G20 (INCH MODE)\n`
   gcode += `G90 G17 G40 G80\n`
   gcode += `T${toolNumber} M06 (SELECT TOOL ${toolNumber})\n`
@@ -102,34 +93,41 @@ function generateGCode(data: FormValues): string {
   gcode += `G0 X0. Y0.\n` 
   gcode += `G43 Z${rPlane} H${toolNumber} M08\n`
   
-  gcode += `G01 Z${zBottom.toFixed(4)} F${formatFeed(feed)}\n`
+  // Iterate through the number of radial steps
+  for (let step = 1; step <= radialSteps; step++) {
+    
+    // Calculate the I value for this specific step
+    // Example: If total I is 0.0625 and step is 1 of 3: (0.0625 * 1) / 3 = 0.0208
+    const currentStepRadius = (totalPathRadius * step) / radialSteps
+    const currentI = currentStepRadius.toFixed(4)
 
-  gcode += `G91\n`
+    gcode += `\n(--- Pass ${step} of ${radialSteps} | Cut Radius: ${currentI} ---)\n`
 
-  // Build radii for each radial pass, then sort by absolute value ascending so the
-  // smallest I (smallest absolute radius) is generated first to ensure the tool
-  // "steps in" correctly.
-  // Use absolute radii (distance from center) and sort ascending so the
-  // smallest radial distance is executed first.
-  const radii = Array.from({ length: passes }, (_, i) => Math.abs(pathRadius - i * radialStep))
-  radii.sort((a, b) => a - b)
+    // Move to bottom of hole (Absolute)
+    // We do this every pass to ensure we start the spiral from the bottom
+    gcode += `G90 G01 Z${zBottom.toFixed(4)} F${formatFeed(feed)}\n`
 
-  radii.forEach((thisRadius, idx) => {
-    gcode += `(Pass ${idx + 1})\n`
-    gcode += `G01 ${compensationDirection} D${toolNumber} X${thisRadius.toFixed(4)} Y0. F${formatFeed(feed)}\n`
+    // Switch to Incremental for the helical move
+    gcode += `G91\n`
 
+    // Lead In: Move X by current step radius
+    gcode += `G01 ${compensationDirection} D${toolNumber} X${currentI} Y0. F${formatFeed(feed)}\n`
+      
+    // Spiral Up Logic
     let currentThreadZ = 0
-    while (currentThreadZ < threadDepth) {
-      const zMove = Math.min(threadPitch, threadDepth - currentThreadZ)
-      gcode += `${helicalDirection} X0. Y0. Z${zMove.toFixed(4)} I-${iValue.toFixed(4)} J0. F${formatFeed(feed)}\n`
-      currentThreadZ += zMove
+    while(currentThreadZ < threadDepth) {
+        const zMove = Math.min(threadPitch, threadDepth)
+        // Note: I value changes based on the current step radius
+        gcode += `${helicalDirection} X0. Y0. Z${zMove.toFixed(4)} I-${currentI} J0. F${formatFeed(feed)}\n`
+        currentThreadZ += zMove
     }
+    
+    // Lead Out: Return to center (X0 relative to hole center)
+    gcode += `G01 G40 X-${currentI} Y0.\n`
+  }
 
-    gcode += `G01 G40 X-${thisRadius.toFixed(4)} Y0.\n`
-  })
-
-  gcode += `G90\n`
-  
+  // Final Cleanup
+  gcode += `\nG90\n`
   gcode += `G00 Z${rPlane}\n`
   gcode += `M05\n`
   gcode += `M09\n`
@@ -158,7 +156,7 @@ export function ThreadMillGenerator() {
       hand: 'rh',
       rPlane: 0.1,
       toolNumber: 1,
-      radialPasses: 1,
+      radialSteps: 1,
     },
   })
 
@@ -225,9 +223,9 @@ export function ThreadMillGenerator() {
                     <FormControl>
                       <Input type="number" step="0.001" {...field} />
                     </FormControl>
-                     <FormDescription>
-                      This is the pre-drilled hole size.
-                    </FormDescription>
+                      <FormDescription>
+                       This is the pre-drilled hole size.
+                      </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -284,48 +282,72 @@ export function ThreadMillGenerator() {
                   </FormItem>
                 )}
               />
-                <FormField
-                    control={form.control}
-                    name="hand"
-                    render={({ field }) => (
-                        <FormItem className="space-y-3">
-                        <FormLabel>Thread Hand</FormLabel>
-                        <FormControl>
-                            <RadioGroup
-                            onValueChange={field.onChange}
-                            defaultValue={field.value}
-                            className="flex flex-row space-x-4"
-                            >
-                            <FormItem className="flex items-center space-x-2">
-                                <FormControl>
-                                <RadioGroupItem value="rh" />
-                                </FormControl>
-                                <FormLabel className="font-normal">Right Hand</FormLabel>
-                            </FormItem>
-                            <FormItem className="flex items-center space-x-2">
-                                <FormControl>
-                                <RadioGroupItem value="lh" />
-                                </FormControl>
-                                <FormLabel className="font-normal">Left Hand</FormLabel>
-                            </FormItem>
-                            </RadioGroup>
-                        </FormControl>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                />
+              <FormField
+                control={form.control}
+                name="radialSteps"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Radial Steps</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value.toString()}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select steps" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="1">1 Step (Full Depth)</SelectItem>
+                        <SelectItem value="2">2 Steps</SelectItem>
+                        <SelectItem value="3">3 Steps</SelectItem>
+                        <SelectItem value="4">4 Steps</SelectItem>
+                        <SelectItem value="5">5 Steps</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Increases path radius incrementally.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+               <FormField
+                  control={form.control}
+                  name="hand"
+                  render={({ field }) => (
+                      <FormItem className="space-y-3">
+                      <FormLabel>Thread Hand</FormLabel>
+                      <FormControl>
+                          <RadioGroup
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                          className="flex flex-row space-x-4"
+                          >
+                          <FormItem className="flex items-center space-x-2">
+                              <FormControl>
+                              <RadioGroupItem value="rh" />
+                              </FormControl>
+                              <FormLabel className="font-normal">Right Hand</FormLabel>
+                          </FormItem>
+                          <FormItem className="flex items-center space-x-2">
+                              <FormControl>
+                              <RadioGroupItem value="lh" />
+                              </FormControl>
+                              <FormLabel className="font-normal">Left Hand</FormLabel>
+                          </FormItem>
+                          </RadioGroup>
+                      </FormControl>
+                      <FormMessage />
+                      </FormItem>
+                  )}
+              />
               <FormField
                 control={form.control}
                 name="rPlane"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>R Plane (Z Start Distance)</FormLabel>
+                    <FormLabel>R Plane (Z Start)</FormLabel>
                     <FormControl>
                       <Input type="number" step="0.001" {...field} />
                     </FormControl>
-                    <FormDescription>
-                      Defaults to Z0.1.
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -339,37 +361,6 @@ export function ThreadMillGenerator() {
                     <FormControl>
                       <Input type="number" step="1" {...field} />
                     </FormControl>
-                    <FormDescription>
-                      Changes T and H numbers (e.g., T1 H1).
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="radialPasses"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Radial Passes</FormLabel>
-                    <FormControl>
-                      <Select
-                        onValueChange={(v) => field.onChange(Number(v))}
-                        defaultValue={String(field.value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="1">1</SelectItem>
-                          <SelectItem value="2">2</SelectItem>
-                          <SelectItem value="3">3</SelectItem>
-                          <SelectItem value="4">4</SelectItem>
-                          <SelectItem value="5">5</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                    <FormDescription>Number of radial passes (1-5). Default 1.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
